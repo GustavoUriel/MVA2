@@ -54,5 +54,7 @@ if __name__ == '__main__':
     init_database()
     print("\n✅ Database initialization successful!")
   except Exception as e:
+    import traceback
+    traceback.print_exc()  # This prints the full traceback
     print(f"\n❌ Database initialization failed: {e}")
     sys.exit(1)

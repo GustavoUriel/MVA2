@@ -95,6 +95,7 @@ def create_app(config_class=None):
   login_manager.login_view = 'auth.login'  # type: ignore
   login_manager.login_message = 'Please log in to access this page.'
   login_manager.login_message_category = 'info'
+  login_manager.session_protection = 'strong'  # Add strong session protection
 
   @login_manager.user_loader
   def load_user(user_id):

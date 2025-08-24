@@ -387,6 +387,8 @@ class Patient(db.Model):
         patient = Patient.create_from_dict(user_id, patient_data)
         patients.append(patient)
       except Exception as e:
+        import traceback
+        traceback.print_exc()  # This prints the full traceback
         current_app.logger.error(f"Error creating patient: {e}")
         continue
 

@@ -4,6 +4,7 @@ Patient data API endpoints for MVA2 application
 Handles patient data CRUD operations, filtering, and clinical data management.
 """
 
+import traceback
 from flask import request, current_app
 from flask_restx import Namespace, Resource, fields
 from flask_login import login_required, current_user
@@ -119,6 +120,7 @@ class PatientList(Resource):
       }
 
     except Exception as e:
+      traceback.print_exc()  # This prints the full traceback
       current_app.logger.error(f"Error fetching patients: {e}")
       return {'message': 'Failed to fetch patients'}, 500
 
