@@ -309,7 +309,8 @@ class Analysis(db.Model):
     analysis = Analysis(
         user_id=user_id,
         name=name,
-        analysis_type=analysis_type,
+        analysis_type=analysis_type.value if isinstance(
+            analysis_type, AnalysisType) else analysis_type,
         configuration=configuration,
         **kwargs
     )
@@ -430,9 +431,9 @@ class SavedView(db.Model):
         user_id=user_id,
         name=name,
         view_type=view_type,
-        configuration=configuration,
         **kwargs
     )
+    view.configuration = configuration
 
     db.session.add(view)
     db.session.commit()

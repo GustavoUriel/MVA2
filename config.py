@@ -36,6 +36,7 @@ class Config:
   # OAuth settings
   GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
   GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
+  GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI')
 
   # Redis settings
   REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
