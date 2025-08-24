@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block meta_description %}Multiple Myeloma Multivariate Analysis Platform{% endblock %}">
+    <title>{% block title %}MVA2 - Multiple Myeloma Analysis{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="bi bi-graph-up"></i> MVA2
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.patients') }}">
+                            <i class="bi bi-people"></i> Patients
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.taxonomy') }}">
+                            <i class="bi bi-tree"></i> Taxonomy
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.analysis') }}">
+                            <i class="bi bi-bar-chart"></i> Analysis
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.data_upload') }}">
+                            <i class="bi bi-upload"></i> Upload Data
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.reports') }}">
+                            <i class="bi bi-file-earmark-text"></i> Reports
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.help') }}">
+                            <i class="bi bi-question-circle"></i> Help
+                        </a>
+                    </li>
+                </ul>
+                
+                <!-- Search Bar -->
+                {% if current_user.is_authenticated %}
+                <div class="d-flex me-3">
+                    <input class="form-control me-2" type="search" placeholder="Search..." id="globalSearch">
+                    <div id="searchResults" class="position-absolute top-100 start-0 w-100 bg-white shadow rounded d-none" style="z-index: 1050;"></div>
+                </div>
+                {% endif %}
+                
+                <ul class="navbar-nav">
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            {% if current_user.profile_picture %}
+                            <img src="{{ current_user.profile_picture }}" alt="Profile" class="rounded-circle me-2" width="24" height="24">
+                            {% else %}
+                            <i class="bi bi-person-circle me-2"></i>
+                            {% endif %}
+                            {{ current_user.name or current_user.email }}
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('main.settings') }}">
+                                <i class="bi bi-gear"></i> Settings
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="logout()">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <button class="btn btn-outline-light" onclick="signInWithGoogle()">
+                            <i class="bi bi-google"></i> Sign In
+                        </button>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="container mt-3">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="container-fluid mt-3">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>MVA2 Platform</h5>
+                    <p class="text-muted">Multiple Myeloma Multivariate Analysis Platform for biomedical research.</p>
+                </div>
+                <div class="col-md-3">
+                    <h6>Resources</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="{{ url_for('main.help') }}" class="text-muted">Documentation</a></li>
+                        <li><a href="{{ url_for('main.about') }}" class="text-muted">About</a></li>
+                        <li><a href="{{ url_for('main.privacy') }}" class="text-muted">Privacy Policy</a></li>
+                        <li><a href="{{ url_for('main.terms') }}" class="text-muted">Terms of Service</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h6>Support</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-muted">Contact Support</a></li>
+                        <li><a href="#" class="text-muted">Bug Reports</a></li>
+                        <li><a href="#" class="text-muted">Feature Requests</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-12 text-center">
+                    <p class="text-muted mb-0">&copy; {{ moment().year }} MVA2 Platform. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Google OAuth -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    {% block extra_scripts %}{% endblock %}
+
+    <script>
+        // Google OAuth Configuration
+        {% if not current_user.is_authenticated %}
+        function signInWithGoogle() {
+            google.accounts.id.initialize({
+                client_id: "{{ config.GOOGLE_CLIENT_ID }}",
+                callback: handleGoogleSignIn
+            });
+            
+            google.accounts.id.prompt();
+        }
+
+        function handleGoogleSignIn(response) {
+            fetch('/api/v1/auth/google', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    credential: response.credential
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.redirect_url || '/dashboard';
+                } else {
+                    alert('Login failed: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Login error:', error);
+                alert('Login failed. Please try again.');
+            });
+        }
+        {% endif %}
+
+        // Logout function
+        function logout() {
+            fetch('/api/v1/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                window.location.href = data.redirect_url || '/';
+            })
+            .catch(error => {
+                console.error('Logout error:', error);
+                window.location.href = '/';
+            });
+        }
+
+        // Global search functionality
+        {% if current_user.is_authenticated %}
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('globalSearch');
+            const searchResults = document.getElementById('searchResults');
+            let searchTimeout;
+
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const query = this.value.trim();
+
+                if (query.length < 2) {
+                    searchResults.classList.add('d-none');
+                    return;
+                }
+
+                searchTimeout = setTimeout(() => {
+                    fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            displaySearchResults(data.results);
+                        })
+                        .catch(error => {
+                            console.error('Search error:', error);
+                        });
+                }, 300);
+            });
+
+            function displaySearchResults(results) {
+                if (results.length === 0) {
+                    searchResults.classList.add('d-none');
+                    return;
+                }
+
+                const html = results.map(result => `
+                    <a href="${result.url}" class="d-block p-2 text-decoration-none border-bottom">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-${getIconForType(result.type)} me-2"></i>
+                            <div>
+                                <div class="fw-bold">${result.title}</div>
+                                <small class="text-muted">${result.subtitle}</small>
+                            </div>
+                        </div>
+                    </a>
+                `).join('');
+
+                searchResults.innerHTML = html;
+                searchResults.classList.remove('d-none');
+            }
+
+            function getIconForType(type) {
+                const icons = {
+                    'patient': 'person',
+                    'analysis': 'bar-chart',
+                    'taxonomy': 'tree'
+                };
+                return icons[type] || 'circle';
+            }
+
+            // Hide search results when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                    searchResults.classList.add('d-none');
+                }
+            });
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
