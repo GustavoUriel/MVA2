@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Data Upload - MVA2{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">Data Upload</h1>
+
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="bi bi-people text-primary me-2"></i>
+                                Patient Data
+                            </h5>
+                            <p class="card-text">
+                                Upload patient clinical data, demographics, and medical history.
+                            </p>
+                            
+                            <div class="upload-area" id="patientUploadArea">
+                                <div class="text-center">
+                                    <i class="bi bi-cloud-upload display-4 text-muted mb-3"></i>
+                                    <h6>Drag & drop patient files here</h6>
+                                    <p class="text-muted">or <button class="btn btn-link p-0">browse files</button></p>
+                                    <small class="text-muted">Supports CSV, Excel (.xlsx)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="bi bi-diagram-3 text-success me-2"></i>
+                                Microbiome Data
+                            </h5>
+                            <p class="card-text">
+                                Upload taxonomic abundance data and Bracken results.
+                            </p>
+                            
+                            <div class="upload-area" id="microbiomeUploadArea">
+                                <div class="text-center">
+                                    <i class="bi bi-cloud-upload display-4 text-muted mb-3"></i>
+                                    <h6>Drag & drop microbiome files here</h6>
+                                    <p class="text-muted">or <button class="btn btn-link p-0">browse files</button></p>
+                                    <small class="text-muted">Supports Bracken output, CSV, TSV</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Upload History</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Type</th>
+                                    <th>Size</th>
+                                    <th>Status</th>
+                                    <th>Uploaded</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        No files uploaded yet. Use the upload areas above to get started.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 12px;
+    padding: 3rem 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.upload-area:hover {
+    border-color: var(--primary-color);
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.upload-area.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(13, 110, 253, 0.1);
+}
+</style>
+{% endblock %}

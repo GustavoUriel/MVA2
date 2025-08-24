@@ -39,7 +39,7 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["10000 per day", "1000 per hour", "100 per minute"],
     storage_uri="memory://"  # Use memory for now, Redis for production
 )
 cache = Cache(config={'CACHE_TYPE': 'simple'})  # Simple cache for development
@@ -92,7 +92,7 @@ def create_app(config_class=None):
   })
 
   # Configure login manager
-  login_manager.login_view = 'auth.login'
+  login_manager.login_view = 'auth.login'  # type: ignore
   login_manager.login_message = 'Please log in to access this page.'
   login_manager.login_message_category = 'info'
 
@@ -106,15 +106,10 @@ def create_app(config_class=None):
       name='google',
       client_id=flask_app.config.get('GOOGLE_CLIENT_ID'),
       client_secret=flask_app.config.get('GOOGLE_CLIENT_SECRET'),
-      access_token_url='https://accounts.google.com/o/oauth2/token',
-      access_token_params=None,
-      authorize_url='https://accounts.google.com/o/oauth2/auth',
-      authorize_params=None,
-      api_base_url='https://www.googleapis.com/oauth2/v1/',
-      # This is the correct endpoint for user info
-      userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
-      client_kwargs={'scope': 'openid email profile'},
-      jwks_uri="https://www.googleapis.com/oauth2/v3/certs",
+      server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+      client_kwargs={
+          'scope': 'openid email profile'
+      }
   )
 
   # Register blueprints
@@ -184,12 +179,12 @@ def create_app(config_class=None):
     # Content Security Policy
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+        "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net https://fonts.googleapis.com; "
         "img-src 'self' data: https:; "
         "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; "
-        "connect-src 'self' https://accounts.google.com/gsi/; "
-        "frame-src 'self' https://accounts.google.com/gsi/;"
+        "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://openidconnect.googleapis.com; "
+        "frame-src 'self' https://accounts.google.com;"
     )
     response.headers['Content-Security-Policy'] = csp
 

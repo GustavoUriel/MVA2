@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Login - MVA2{% endblock %}
+
+{% block content %}
+<div class="container-fluid h-100">
+    <div class="row h-100 justify-content-center align-items-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-lg border-0">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <h2 class="text-gradient">Welcome to MVA2</h2>
+                        <p class="text-muted">Sign in to access your biomedical research platform</p>
+                    </div>
+
+                    <div class="d-grid">
+                        <a href="{{ url_for('auth.google_auth') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-google me-2"></i>
+                            Sign in with Google
+                        </a>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <p class="text-muted small">
+                            By signing in, you agree to our Terms of Service and Privacy Policy
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.h-100 {
+    min-height: 100vh;
+}
+
+.card {
+    border-radius: 16px;
+}
+
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+}
+
+.text-gradient {
+    background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+</style>
+{% endblock %}

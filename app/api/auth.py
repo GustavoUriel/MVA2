@@ -11,7 +11,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 import secrets
 
-from app.models import User
+from app.models.user import User
 from app import db
 
 auth_ns = Namespace('auth', description='Authentication operations')
@@ -98,24 +98,30 @@ class GoogleAuth(Resource):
       user = User.query.filter_by(email=email).first()
 
       if not user:
-        # Create new user
-        user = User(
-            email=email,
-            name=name,
-            google_id=google_id,
-            profile_picture=picture,
-            is_active=True
-        )
-        db.session.add(user)
-        db.session.commit()
-
+        # Create new user using helper to ensure unique username
+        google_user_info = {
+            'email': email,
+            'given_name': idinfo.get('given_name'),
+            'family_name': idinfo.get('family_name'),
+            'sub': google_id,
+            'picture': picture,
+            'email_verified': idinfo.get('email_verified', False),
+            'name': name
+        }
+        user = User.create_from_google(google_user_info)
         current_app.logger.info(f"Created new user: {email}")
       else:
         # Update existing user information
-        user.name = name or user.name
-        user.google_id = google_id
-        user.profile_picture = picture
-        user.update_last_login()
+        if name and not user.username:
+          user.username = name
+        user.first_name = idinfo.get('given_name') or user.first_name
+        user.last_name = idinfo.get('family_name') or user.last_name
+        user.google_id = google_id or user.google_id
+        user.profile_picture_url = picture or user.profile_picture_url
+        user.is_verified = bool(idinfo.get('email_verified'))
+        # update last_login
+        from datetime import datetime
+        user.last_login = datetime.utcnow()
         db.session.commit()
 
       # Log in user
@@ -126,10 +132,23 @@ class GoogleAuth(Resource):
       session['user_id'] = user.id
       session['csrf_token'] = secrets.token_hex(16)
 
+      # Build explicit user payload matching response model
+      user_name = None
+      if user.first_name or user.last_name:
+        user_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+      user_name = user_name or user.username or user.email
+
       return {
           'success': True,
           'message': 'Login successful',
-          'user': user.to_dict(),
+          'user': {
+              'id': user.id,
+              'email': user.email,
+              'name': user_name,
+              'role': user.role,
+              'created_at': user.created_at,
+              'last_login': user.last_login,
+          },
           'redirect_url': url_for('main.dashboard')
       }
 

@@ -57,44 +57,94 @@ def google_auth():
 @bp.route('/login/authorized')
 def login_authorized():
   """Google OAuth callback"""
+
+  """   try: """
+  # Get OAuth from current app extensions
+  oauth = current_app.extensions.get('authlib.integrations.flask_client')
+  if not oauth:
+    flash('OAuth not properly configured', 'error')
+    return redirect(url_for('main.index'))
+
+  google = oauth._clients.get('google')
+  if not google:
+    flash('Google OAuth client not configured', 'error')
+    return redirect(url_for('main.index'))
+
+  # Handle the callback
+  token = google.authorize_access_token()
+  if not token:
+    raise RuntimeError('No token returned from Google')
+
+  current_app.logger.info(f"Received token keys: {list(token.keys())}")
+
+  # Prefer ID token claims (no extra HTTP request)
+  user_info = None
   try:
-    # Get OAuth from current app extensions
-    oauth = current_app.extensions.get('authlib.integrations.flask_client')
-    if not oauth:
-      flash('OAuth not properly configured', 'error')
-      return redirect(url_for('main.index'))
+    claims = google.parse_id_token(token)
+    if claims:
+      user_info = {
+          'email': claims.get('email'),
+          'name': claims.get('name'),
+          'given_name': claims.get('given_name'),
+          'family_name': claims.get('family_name'),
+          'picture': claims.get('picture'),
+          'sub': claims.get('sub'),
+          'email_verified': claims.get('email_verified')
+      }
+      current_app.logger.info('Parsed ID token claims successfully')
+  except Exception as parse_err:
+    current_app.logger.warning(f"parse_id_token failed: {parse_err}")
 
-    google = oauth._clients.get('google')
-    if not google:
-      flash('Google OAuth client not configured', 'error')
-      return redirect(url_for('main.index'))
+  # Fallback to UserInfo endpoint if needed
+  if not user_info or not user_info.get('email'):
+    try:
+      # Use the correct Google userinfo endpoint
+      resp = google.get('https://openidconnect.googleapis.com/v1/userinfo')
+      if not resp or resp.status_code >= 400:
+        raise RuntimeError('Failed to fetch userinfo from Google endpoint')
+      user_info = resp.json()
+      current_app.logger.info('Fetched userinfo from endpoint')
+    except Exception as ui_err:
+      current_app.logger.error(f"Failed to fetch userinfo: {ui_err}")
+      raise
 
-    # Handle the callback
-    token = google.authorize_access_token()
-    user_info = google.get('userinfo').json()
+  if not user_info or not user_info.get('email'):
+    raise RuntimeError('Missing email in Google user info')
 
-    # Log user info for debugging
-    current_app.logger.info(f"User info: {user_info}")
+  # Log user info for debugging (redact picture URL length only)
+  safe_info = {k: (v if k != 'picture' else '...')
+               for k, v in user_info.items()}
+  current_app.logger.info(f"User info (redacted): {safe_info}")
 
-    # Find or create user
-    user = User.query.filter_by(email=user_info['email']).first()
-    if not user:
-      user = User()
-      user.email = user_info['email']
-      db.session.add(user)
-
-    # Update user info
-    user.username = user_info.get('name')
-    user.profile_picture_url = user_info.get('picture')
-    user.google_id = user_info.get('sub')
+  # Find or create user
+  user = User.query.filter_by(email=user_info['email']).first()
+  if not user:
+    # Use helper to ensure unique username and defaults
+    user = User.create_from_google(user_info)
+  else:
+    # Update existing user fields
+    user.first_name = user_info.get('given_name') or user.first_name
+    user.last_name = user_info.get('family_name') or user.last_name
+    user.profile_picture_url = user_info.get(
+        'picture') or user.profile_picture_url
+    user.google_id = user_info.get('sub') or user.google_id
+    user.is_verified = bool(user_info.get('email_verified'))
     db.session.commit()
 
-    # Log in the user
-    login_user(user)
-    flash('Logged in successfully.', 'success')
-    return redirect(url_for('main.dashboard'))
+  # Log in the user
+  login_user(user, remember=True)
+  # Update last_login timestamp
+  try:
+    from datetime import datetime
+    user.last_login = datetime.utcnow()
+    db.session.commit()
+  except Exception as e2:
+    current_app.logger.warning(f"Failed updating last_login: {e2}")
+  flash('Logged in successfully.', 'success')
+  return redirect(url_for('main.dashboard'))
 
-  except Exception as e:
+
+"""   except Exception as e:
     current_app.logger.error(f"Error during Google OAuth callback: {e}")
     flash('Authentication failed.', 'error')
-    return redirect(url_for('main.index'))
+    return redirect(url_for('main.index')) """

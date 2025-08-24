@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - MVA2{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">Account Settings</h1>
+
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Profile Information</h5>
+                            <form>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="firstName" class="form-label">First Name</label>
+                                        <input type="text" class="form-control" id="firstName" value="{{ current_user.first_name or '' }}" readonly>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="lastName" class="form-label">Last Name</label>
+                                        <input type="text" class="form-control" id="lastName" value="{{ current_user.last_name or '' }}" readonly>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email" value="{{ current_user.email }}" readonly>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="institution" class="form-label">Institution</label>
+                                        <input type="text" class="form-control" id="institution" value="{{ current_user.institution or '' }}" readonly>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="department" class="form-label">Department</label>
+                                        <input type="text" class="form-control" id="department" value="{{ current_user.department or '' }}" readonly>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-primary" disabled>
+                                    <i class="bi bi-pencil me-2"></i>Edit Profile
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Account Information</h5>
+                            <div class="mb-3">
+                                <small class="text-muted">Account Type</small>
+                                <p class="mb-1">{{ current_user.role.title() if current_user.role else 'Viewer' }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">Member Since</small>
+                                <p class="mb-1">{{ current_user.created_at.strftime('%B %Y') if current_user.created_at else 'N/A' }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">Last Login</small>
+                                <p class="mb-1">{{ current_user.last_login.strftime('%B %d, %Y') if current_user.last_login else 'N/A' }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">Total Analyses</small>
+                                <p class="mb-1">{{ current_user.total_analyses or 0 }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Preferences</h5>
+                            <div class="mb-3">
+                                <label for="timezone" class="form-label">Timezone</label>
+                                <select class="form-select" id="timezone" disabled>
+                                    <option>{{ current_user.timezone or 'UTC' }}</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="language" class="form-label">Language</label>
+                                <select class="form-select" id="language" disabled>
+                                    <option>{{ current_user.language or 'English' }}</option>
+                                </select>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" disabled>
+                                Update Preferences
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

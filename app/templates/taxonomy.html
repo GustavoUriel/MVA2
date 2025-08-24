@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Taxonomy - MVA2{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">Taxonomy Data</h1>
+                <button class="btn btn-primary">
+                    <i class="bi bi-upload me-2"></i>Import Taxonomy
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Microbiome Taxonomy</h5>
+                    <p class="text-muted">
+                        Microbiome taxonomy data management and visualization.
+                        This includes taxonomic classification, abundance data, and phylogenetic analysis.
+                    </p>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Species Level</h6>
+                                    <h3 class="text-primary">0</h3>
+                                    <small class="text-muted">Taxonomic entries</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Genus Level</h6>
+                                    <h3 class="text-success">0</h3>
+                                    <small class="text-muted">Taxonomic entries</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">Family Level</h6>
+                                    <h3 class="text-info">0</h3>
+                                    <small class="text-muted">Taxonomic entries</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
