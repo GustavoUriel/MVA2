@@ -47,6 +47,13 @@ oauth = OAuth()
 
 
 def create_app(config_class=None):
+  from datetime import datetime
+
+  flask_app = Flask(__name__)
+
+  @flask_app.context_processor
+  def inject_current_year():
+    return {'current_year': datetime.now().year}
   """
   Application factory pattern for creating Flask app instances
 
@@ -56,7 +63,6 @@ def create_app(config_class=None):
   Returns:
       Flask application instance
   """
-  flask_app = Flask(__name__)
 
   # Load configuration based on environment
   if config_class is None:
@@ -100,10 +106,15 @@ def create_app(config_class=None):
       name='google',
       client_id=flask_app.config.get('GOOGLE_CLIENT_ID'),
       client_secret=flask_app.config.get('GOOGLE_CLIENT_SECRET'),
-      server_metadata_url='https://accounts.google.com/.well-known/openid_configuration',
-      client_kwargs={
-          'scope': 'openid email profile'
-      }
+      access_token_url='https://accounts.google.com/o/oauth2/token',
+      access_token_params=None,
+      authorize_url='https://accounts.google.com/o/oauth2/auth',
+      authorize_params=None,
+      api_base_url='https://www.googleapis.com/oauth2/v1/',
+      # This is the correct endpoint for user info
+      userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
+      client_kwargs={'scope': 'openid email profile'},
+      jwks_uri="https://www.googleapis.com/oauth2/v3/certs",
   )
 
   # Register blueprints
@@ -173,12 +184,12 @@ def create_app(config_class=None):
     # Content Security Policy
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style https://cdn.jsdelivr.net https://fonts.googleapis.com; "
         "img-src 'self' data: https:; "
-        "font-src 'self' https://cdn.jsdelivr.net; "
-        "connect-src 'self' https://accounts.google.com; "
-        "frame-src 'none';"
+        "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; "
+        "connect-src 'self' https://accounts.google.com/gsi/; "
+        "frame-src 'self' https://accounts.google.com/gsi/;"
     )
     response.headers['Content-Security-Policy'] = csp
 

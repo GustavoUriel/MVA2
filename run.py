@@ -4,11 +4,17 @@ Author: MVA2 Development Team
 Date: 2025
 """
 
-from app import create_app, db
-from app.models.user import User
-from app.models.patient import Patient
-from app.models.taxonomy import Taxonomy
 from app.models.analysis import Analysis
+from app.models.taxonomy import Taxonomy
+from app.models.patient import Patient
+from app.models.user import User
+from app import create_app, db
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 # Create Flask application instance
 app = create_app()
