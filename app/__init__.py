@@ -28,8 +28,11 @@ from flask_caching import Cache
 from authlib.integrations.flask_client import OAuth
 from config import Config, DevelopmentConfig, ProductionConfig, TestingConfig
 import redis
+from flask_moment import Moment
+
 
 # Initialize Flask extensions
+moment = Moment()
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
