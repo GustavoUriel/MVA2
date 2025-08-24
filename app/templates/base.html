@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="{% block meta_description %}Multiple Myeloma Multivariate Analysis Platform{% endblock %}">
     <title>{% block title %}MVA2 - Multiple Myeloma Analysis{% endblock %}</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <!-- Removed moment.js (not used) to avoid network errors from CDN -->
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
@@ -14,6 +15,8 @@
     
     <!-- Chart.js for visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Favicon to avoid 404s -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23007bff'/%3E%3Ctext x='32' y='38' font-size='28' text-anchor='middle' fill='white' font-family='Arial'%3EM%3C/text%3E%3C/svg%3E" />
     
     {% block extra_head %}{% endblock %}
 </head>
@@ -31,8 +34,7 @@
             </button>
             
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    {% if current_user.is_authenticated %}
+                <ul class="navbar-nav me-auto">{% if current_user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.dashboard') }}">
                             <i class="bi bi-speedometer2"></i> Dashboard
@@ -63,8 +65,7 @@
                             <i class="bi bi-file-earmark-text"></i> Reports
                         </a>
                     </li>
-                    {% endif %}
-                    <li class="nav-item">
+                    {% endif %}<li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.health') }}">
                             <i class="bi bi-question-circle"></i> Help
                         </a>
@@ -102,14 +103,9 @@
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <button class="btn btn-outline-light" onclick="signInWithGoogle()">
+                        <a href="/auth/google" class="btn btn-outline-light">
                             <i class="bi bi-google"></i> Sign In
-                        </button>
-                        <noscript>
-                            <a href="/auth/google" class="btn btn-outline-light">
-                                <i class="bi bi-google"></i> Sign In
-                            </a>
-                        </noscript>
+                        </a>
                     </li>
                     {% endif %}
                 </ul>
@@ -182,164 +178,6 @@
     {% block extra_scripts %}{% endblock %}
 
     <script>
-        // Google OAuth Configuration
-        {% if not current_user.is_authenticated %}
-        
-        // Debug: Check what's available
-        console.log('Google script availability check:', {
-            googleDefined: typeof google !== 'undefined',
-            googleAccounts: typeof google !== 'undefined' && google.accounts,
-            clientId: "{{ config.GOOGLE_CLIENT_ID }}"
-        });
-
-        let googleInitialized = false;
-        
-        // Wait for Google script to load
-        function initializeGoogleSignIn() {
-            console.log('Attempting to initialize Google Sign-In...');
-            if (typeof google !== 'undefined' && google.accounts) {
-                try {
-                    google.accounts.id.initialize({
-                        client_id: "{{ config.GOOGLE_CLIENT_ID }}",
-                        callback: handleGoogleSignIn
-                    });
-                    googleInitialized = true;
-                    console.log('Google Sign-In initialized successfully');
-                } catch (error) {
-                    console.error('Error initializing Google Sign-In:', error);
-                }
-            } else {
-                console.error('Google Identity Services not available');
-            }
-        }
-        
-        function signInWithGoogle() {
-            console.log('Sign in button clicked');
-            const btn = event?.target || document.querySelector('.btn-outline-light');
-            
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading...';
-            }
-            
-            function enableBtn() {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-google"></i> Sign In';
-                }
-            }
-            
-            function attemptSignIn() {
-                console.log('Attempting sign in, google available:', typeof google !== 'undefined');
-                
-                if (typeof google !== 'undefined' && google.accounts) {
-                    if (!googleInitialized) {
-                        console.log('Google not initialized, initializing now...');
-                        initializeGoogleSignIn();
-                    }
-                    
-                    if (googleInitialized) {
-                        console.log('Prompting for sign in...');
-                        google.accounts.id.prompt();
-                        enableBtn();
-                    } else {
-                        enableBtn();
-                        alert('Failed to initialize Google Sign-In. Please refresh the page and try again.');
-                    }
-                } else {
-                    // Fallback: redirect to server-side OAuth
-                    console.log('Google script not available, using server-side OAuth fallback');
-                    window.location.href = '/auth/google';
-                }
-            }
-            
-            // Give it a moment for the script to load if it's still loading
-            setTimeout(attemptSignIn, 100);
-        }
-
-        // Initialize when page loads with multiple attempts
-        function tryInitialize(attempt = 1) {
-            console.log(`Initialization attempt ${attempt}`);
-            
-            if (typeof google !== 'undefined' && google.accounts) {
-                initializeGoogleSignIn();
-            } else if (attempt === 1) {
-                // First attempt: try to load Google script dynamically
-                loadGoogleScript(() => {
-                    if (typeof google !== 'undefined' && google.accounts) {
-                        initializeGoogleSignIn();
-                    } else {
-                        console.error('Google script loaded but google object not available');
-                    }
-                });
-            } else if (attempt < 5) {
-                setTimeout(() => tryInitialize(attempt + 1), 1000);
-            } else {
-                console.error('Failed to load Google Identity Services after 5 attempts');
-                console.log('Possible causes: Ad blocker, network issues, or corporate firewall');
-            }
-        }
-        
-        function loadGoogleScript(callback) {
-            console.log('Loading Google Identity Services script...');
-            
-            // Check if script already exists
-            if (document.getElementById('google-gsi-script')) {
-                console.log('Google script already exists, waiting for load...');
-                setTimeout(callback, 1000);
-                return;
-            }
-            
-            const script = document.createElement('script');
-            script.src = 'https://accounts.google.com/gsi/client';
-            script.async = true;
-            script.defer = true;
-            script.id = 'google-gsi-script';
-            
-            script.onload = () => {
-                console.log('Google script loaded successfully');
-                setTimeout(callback, 500);
-            };
-            
-            script.onerror = () => {
-                console.error('Failed to load Google script from accounts.google.com');
-                // Try fallback
-                console.log('Trying fallback approach...');
-                setTimeout(callback, 1000);
-            };
-            
-            document.head.appendChild(script);
-        }
-        
-        window.addEventListener('load', function() {
-            setTimeout(() => tryInitialize(), 1000);
-        });
-
-        function handleGoogleSignIn(response) {
-            fetch('/api/v1/auth/google', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    credential: response.credential
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.href = data.redirect_url || '/dashboard';
-                } else {
-                    alert('Login failed: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Login error:', error);
-                alert('Login failed. Please try again.');
-            });
-        }
-        {% endif %}
-
         // Logout function
         function logout() {
             fetch('/api/v1/auth/logout', {

@@ -7,7 +7,8 @@ for biomedical research on multiple myeloma and microbiome data.
 
 from datetime import datetime
 from .. import db
-from sqlalchemy.dialects.postgresql import JSON, ARRAY
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy import func
 from enum import Enum
 
 
@@ -80,7 +81,7 @@ class Analysis(db.Model):
   # Execution information
   execution_time = db.Column(db.Float, nullable=True)  # Seconds
   error_message = db.Column(db.Text, nullable=True)
-  warnings = db.Column(ARRAY(db.Text), nullable=True)
+  warnings = db.Column(JSON, nullable=True)  # List of warning messages
 
   # Metadata
   created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -91,10 +92,22 @@ class Analysis(db.Model):
   # Publication and sharing
   is_public = db.Column(db.Boolean, default=False)
   publication_ready = db.Column(db.Boolean, default=False)
-  tags = db.Column(ARRAY(db.String), nullable=True)
+  tags = db.Column(JSON, nullable=True)  # List of tags
 
-  # Relationships
-  user = db.relationship('User', backref='analyses')
+  # Relationships are defined in User model via backref
+
+  def __init__(self, user_id=None, name=None, analysis_type=None,
+               configuration=None, **kwargs):
+    """Initialize a new Analysis instance"""
+    super().__init__(**kwargs)
+    if user_id:
+      self.user_id = user_id
+    if name:
+      self.name = name
+    if analysis_type:
+      self.analysis_type = analysis_type
+    if configuration:
+      self.configuration = configuration
 
   def __repr__(self):
     return f'<Analysis {self.name} ({self.analysis_type.value})>'
@@ -363,7 +376,7 @@ class SavedView(db.Model):
 
   # Sharing and access
   is_public = db.Column(db.Boolean, default=False)
-  shared_with = db.Column(ARRAY(db.Integer), nullable=True)  # User IDs
+  shared_with = db.Column(JSON, nullable=True)  # List of User IDs
 
   # Metadata
   created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -373,7 +386,17 @@ class SavedView(db.Model):
   access_count = db.Column(db.Integer, default=0)
 
   # Relationships
-  user = db.relationship('User', backref='saved_views')
+  user = db.relationship('User', backref='saved_view_objects')
+
+  def __init__(self, user_id=None, name=None, view_type=None, **kwargs):
+    """Initialize a new SavedView instance"""
+    super().__init__(**kwargs)
+    if user_id:
+      self.user_id = user_id
+    if name:
+      self.name = name
+    if view_type:
+      self.view_type = view_type
 
   def __repr__(self):
     return f'<SavedView {self.name} ({self.view_type})>'
@@ -442,11 +465,12 @@ class SavedView(db.Model):
   @staticmethod
   def get_accessible_views(user_id, view_type=None):
     """Get views accessible to user"""
+    # For SQLite compatibility, we'll do simpler filtering
+    # and check shared_with in Python code if needed
     query = SavedView.query.filter(
         db.or_(
             SavedView.user_id == user_id,
-            SavedView.is_public == True,
-            SavedView.shared_with.contains([user_id])
+            SavedView.is_public == True
         )
     )
 

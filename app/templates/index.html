@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}MVA2 - Biomedical Research Platform{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Hero Section -->
+    <div class="row bg-gradient-primary text-white py-5 mb-5">
+        <div class="col-12 text-center">
+            <h1 class="display-4 fw-bold mb-3">MVA2</h1>
+            <p class="lead mb-4">
+                Advanced Biomedical Research Platform for Multiple Myeloma and Microbiome Analysis
+            </p>
+            {% if not current_user.is_authenticated %}
+            <a href="{{ url_for('auth.google_auth') }}" class="btn btn-light btn-lg">
+                <i class="bi bi-google me-2"></i>
+                Get Started with Google
+            </a>
+            {% else %}
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-light btn-lg">
+                <i class="bi bi-speedometer2 me-2"></i>
+                Go to Dashboard
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <h2 class="text-center mb-5">Platform Features</h2>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-graph-up text-primary" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Advanced Analytics</h5>
+                    <p class="card-text">
+                        Comprehensive statistical analysis including survival analysis, 
+                        Cox regression, and Kaplan-Meier estimation.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-diagram-3 text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Microbiome Analysis</h5>
+                    <p class="card-text">
+                        Comprehensive microbiome data analysis with diversity metrics,
+                        differential abundance, and taxonomic profiling.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-shield-check text-info" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="card-title">Secure & Compliant</h5>
+                    <p class="card-text">
+                        FDA 21 CFR Part 11 compliant with comprehensive audit trails
+                        and secure data management.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Research Focus Section -->
+    <div class="row bg-light py-5 mb-5">
+        <div class="col-12 text-center">
+            <h2 class="mb-4">Research Focus</h2>
+            <p class="lead mb-4">
+                MVA2 is specifically designed for multiple myeloma research, 
+                integrating clinical data with microbiome analysis for comprehensive patient insights.
+            </p>
+            <div class="row justify-content-center">
+                <div class="col-md-3 mb-3">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Survival Analysis</h6>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Microbiome Profiling</h6>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Clinical Integration</h6>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card border-warning">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Data Visualization</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Get Started Section -->
+    {% if not current_user.is_authenticated %}
+    <div class="row">
+        <div class="col-12 text-center">
+            <h2 class="mb-4">Ready to Get Started?</h2>
+            <p class="lead mb-4">
+                Sign in with your Google account to access the MVA2 research platform.
+            </p>
+            <a href="{{ url_for('auth.google_auth') }}" class="btn btn-primary btn-lg">
+                <i class="bi bi-google me-2"></i>
+                Sign in with Google
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, var(--primary-color), #084cbe);
+}
+
+.card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+</style>
+{% endblock %}

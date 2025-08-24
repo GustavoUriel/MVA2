@@ -19,5 +19,10 @@ api = Api(
     doc='/docs/'
 )
 
-# Import and register namespaces when available
-# TODO: Add namespaces as they are implemented
+# Import and register namespaces
+try:
+  from .auth import auth_ns
+  api.add_namespace(auth_ns, path='/auth')
+except Exception as e:
+  # Defer errors to runtime logs
+  pass

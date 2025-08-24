@@ -67,6 +67,12 @@ class Taxonomy(db.Model):
   # Additional metadata as JSON (attribute renamed to avoid SQLAlchemy reserved name)
   metadata_json = db.Column('metadata', JSON, nullable=True)
 
+  def __init__(self, user_id=None, **kwargs):
+    """Initialize a new Taxonomy instance"""
+    super().__init__(**kwargs)
+    if user_id:
+      self.user_id = user_id
+
   def __repr__(self):
     return f'<Taxonomy {self.taxonomy_id}: {self.get_display_name()}>'
 
@@ -285,6 +291,12 @@ class BrackenResult(db.Model):
                              'BrackenResult.user_id == Taxonomy.user_id)',
                              foreign_keys=[taxonomy_id, user_id],
                              viewonly=True)
+
+  def __init__(self, user_id=None, **kwargs):
+    """Initialize a new BrackenResult instance"""
+    super().__init__(**kwargs)
+    if user_id:
+      self.user_id = user_id
 
   def __repr__(self):
     return f'<BrackenResult {self.patient_id}-{self.taxonomy_id}>'

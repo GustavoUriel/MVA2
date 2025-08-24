@@ -6,6 +6,7 @@ for multiple myeloma research with comprehensive data validation.
 """
 
 from datetime import datetime
+from flask import current_app
 from .. import db
 from sqlalchemy.dialects.postgresql import JSON
 import json
@@ -111,7 +112,8 @@ class Patient(db.Model):
 
   # Outcomes and survival
   duration_pfs = db.Column(db.Float, nullable=True)  # Primary duration variable
-  # Primary event indicator\n    duration_survival = db.Column(db.Float, nullable=True)
+  duration_survival = db.Column(
+      db.Float, nullable=True)  # Primary event indicator
   pfs_status = db.Column(db.Boolean, nullable=True)
   death_status = db.Column(db.Boolean, nullable=True)
 

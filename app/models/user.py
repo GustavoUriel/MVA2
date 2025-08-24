@@ -83,6 +83,26 @@ class User(UserMixin, db.Model):
   patients = db.relationship('Patient', backref='owner', lazy='dynamic',
                              cascade='all, delete-orphan')
 
+  def __init__(self, email=None, username=None, first_name=None, last_name=None,
+               google_id=None, profile_picture_url=None, is_verified=False,
+               role='viewer', **kwargs):
+    """Initialize a new User instance"""
+    super().__init__(**kwargs)
+    if email:
+      self.email = email
+    if username:
+      self.username = username
+    if first_name:
+      self.first_name = first_name
+    if last_name:
+      self.last_name = last_name
+    if google_id:
+      self.google_id = google_id
+    if profile_picture_url:
+      self.profile_picture_url = profile_picture_url
+    self.is_verified = is_verified
+    self.role = role
+
   def __repr__(self):
     return f'<User {self.email}>'
 
