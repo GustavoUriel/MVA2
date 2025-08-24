@@ -76,6 +76,8 @@ class GoogleAuth(Resource):
           }, 400
 
       except ValueError as e:
+        import traceback
+        traceback.print_exc()  # This prints the full traceback
         current_app.logger.error(f"Token verification failed: {e}")
         return {
             'success': False,
@@ -153,6 +155,8 @@ class GoogleAuth(Resource):
       }
 
     except Exception as e:
+      import traceback
+      traceback.print_exc()  # This prints the full traceback
       current_app.logger.error(f"Google auth error: {e}")
       return {
           'success': False,
@@ -182,6 +186,8 @@ class Logout(Resource):
       }
 
     except Exception as e:
+      import traceback
+      traceback.print_exc()  # This prints the full traceback
       current_app.logger.error(f"Logout error: {e}")
       return {
           'success': False,
@@ -243,6 +249,8 @@ class Profile(Resource):
       return current_user.to_dict()
 
     except Exception as e:
+      import traceback
+      traceback.print_exc()  # This prints the full traceback
       current_app.logger.error(f"Profile update error: {e}")
       return {'message': 'Profile update failed'}, 500
 

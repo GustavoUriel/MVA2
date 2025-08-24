@@ -24,5 +24,7 @@ try:
   from .auth import auth_ns
   api.add_namespace(auth_ns, path='/auth')
 except Exception as e:
+  import traceback
+  traceback.print_exc()  # This prints the full traceback
   # Defer errors to runtime logs
   pass

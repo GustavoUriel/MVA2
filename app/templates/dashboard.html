@@ -266,18 +266,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function loadQuickStats() {
     fetch('/api/quick-stats')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 console.error('Error loading stats:', data.error);
                 return;
             }
             
-            // Update data status count (could be file count, processing status, etc.)
-            document.getElementById('dataStatusCount').textContent = 'Ready';
+            // Update dashboard stats with real data
+            if (data.patients !== undefined) {
+                document.getElementById('dataStatusCount').textContent = data.patients;
+            }
+            
+            console.log('Quick stats loaded successfully:', data);
         })
         .catch(error => {
             console.error('Error loading quick stats:', error);
+            // Show a user-friendly message
+            document.getElementById('dataStatusCount').textContent = '0';
         });
 }
 

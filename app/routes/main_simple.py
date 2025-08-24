@@ -24,6 +24,8 @@ def dashboard():
   try:
     return render_template('dashboard.html')
   except Exception as e:
+    import traceback
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Dashboard error: {e}")
     flash(f"Error loading dashboard: {str(e)}", 'error')
     return redirect(url_for('main.index'))

@@ -10,10 +10,11 @@ from .. import db
 
 main_bp = Blueprint('main', __name__)
 
+
 def _get_models():
-    """Helper function to import models lazily"""
-    from ..models import Patient, Analysis, Taxonomy
-    return Patient, Analysis, Taxonomy
+  """Helper function to import models lazily"""
+  from ..models import Patient, Analysis, Taxonomy
+  return Patient, Analysis, Taxonomy
 
 
 @main_bp.route('/')
@@ -31,7 +32,7 @@ def dashboard():
   try:
     # Import models locally to avoid circular imports
     Patient, Analysis, Taxonomy = _get_models()
-    
+
     # Get summary statistics
     patient_count = Patient.query.filter_by(user_id=current_user.id).count()
     analysis_count = Analysis.query.filter_by(user_id=current_user.id).count()
@@ -47,6 +48,8 @@ def dashboard():
                            taxonomy_count=taxonomy_count,
                            recent_analyses=recent_analyses)
   except Exception as e:
+    import traceback
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Dashboard error: {e}")
     flash('Error loading dashboard', 'error')
     return render_template('dashboard.html',
@@ -231,6 +234,8 @@ def quick_stats():
     return jsonify(stats)
 
   except Exception as e:
+    import traceback
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Quick stats error: {e}")
     return jsonify({'error': 'Failed to load statistics'}), 500
 
@@ -288,5 +293,7 @@ def search():
     return jsonify({'results': results})
 
   except Exception as e:
+    import traceback
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Search error: {e}")
     return jsonify({'error': 'Search failed'}), 500

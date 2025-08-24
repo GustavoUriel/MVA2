@@ -4,7 +4,8 @@ Main web routes for MVA2 application
 Handles the main web interface routes for the application.
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
+import traceback
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, make_response
 from flask_login import login_required, current_user
 from .. import db
 
@@ -14,9 +15,20 @@ main_bp = Blueprint('main', __name__)
 @main_bp.route('/')
 def index():
   """Home page"""
+  # Force check authentication status
   if current_user.is_authenticated:
+    current_app.logger.info(
+        f"Authenticated user {current_user.email} accessing index, redirecting to dashboard")
     return redirect(url_for('main.dashboard'))
-  return render_template('index.html')
+
+  current_app.logger.info(
+      "Unauthenticated user accessing index, showing welcome page")
+  # Return welcome page with cache control headers to prevent caching
+  response = make_response(render_template('index.html'))
+  response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+  response.headers['Pragma'] = 'no-cache'
+  response.headers['Expires'] = '0'
+  return response
 
 
 @main_bp.route('/dashboard')
@@ -35,6 +47,7 @@ def dashboard():
                            analysis_count=analysis_count,
                            taxonomy_count=taxonomy_count)
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Dashboard error: {e}")
     flash(f"Error loading dashboard: {str(e)}", 'error')
     return redirect(url_for('main.index'))
@@ -66,6 +79,7 @@ def patients():
     # TODO: Implement patient listing logic
     return render_template('patients.html')
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Patients page error: {e}")
     flash(f"Error loading patients: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
@@ -79,6 +93,7 @@ def taxonomy():
     # TODO: Implement taxonomy listing logic
     return render_template('taxonomy.html')
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Taxonomy page error: {e}")
     flash(f"Error loading taxonomy: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
@@ -92,6 +107,7 @@ def analysis():
     # TODO: Implement analysis logic
     return render_template('analysis.html')
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Analysis page error: {e}")
     flash(f"Error loading analysis: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
@@ -105,6 +121,7 @@ def data_upload():
     # TODO: Implement data upload logic
     return render_template('data_upload.html')
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Data upload page error: {e}")
     flash(f"Error loading data upload: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
@@ -118,6 +135,7 @@ def reports():
     # TODO: Implement reports logic
     return render_template('reports.html')
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Reports page error: {e}")
     flash(f"Error loading reports: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
@@ -131,6 +149,7 @@ def settings():
     # TODO: Implement settings logic
     return render_template('settings.html')
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Settings page error: {e}")
     flash(f"Error loading settings: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
@@ -145,6 +164,7 @@ def new_patient():
     flash("New patient form coming soon!", 'info')
     return redirect(url_for('main.patients'))
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"New patient page error: {e}")
     flash(f"Error loading new patient form: {str(e)}", 'error')
     return redirect(url_for('main.patients'))
@@ -159,6 +179,38 @@ def new_analysis():
     flash("New analysis form coming soon!", 'info')
     return redirect(url_for('main.analysis'))
   except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"New analysis page error: {e}")
     flash(f"Error loading new analysis form: {str(e)}", 'error')
     return redirect(url_for('main.analysis'))
+
+
+@main_bp.route('/api/quick-stats')
+@login_required
+def quick_stats():
+  """Quick statistics for dashboard widgets"""
+  try:
+    # TODO: Replace with actual database queries when models are fully implemented
+    stats = {
+        # Patient.query.filter_by(user_id=current_user.id).count(),
+        'patients': 0,
+        # Analysis.query.filter_by(user_id=current_user.id).count(),
+        'analyses': 0,
+        # Taxonomy.query.filter_by(user_id=current_user.id).count(),
+        'taxonomies': 0,
+        'recent_activity': [
+            {
+                'type': 'analysis',
+                'name': 'Sample Analysis',
+                'status': 'completed',
+                'updated_at': '2025-08-24T19:00:00Z'
+            }
+        ]
+    }
+
+    return jsonify(stats)
+
+  except Exception as e:
+    traceback.print_exc()  # This prints the full traceback
+    current_app.logger.error(f"Quick stats error: {e}")
+    return jsonify({'error': 'Failed to load statistics'}), 500

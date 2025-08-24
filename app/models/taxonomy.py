@@ -195,6 +195,8 @@ class Taxonomy(db.Model):
         taxonomy = Taxonomy.create_from_dict(user_id, taxonomy_data)
         taxonomies.append(taxonomy)
       except Exception as e:
+        import traceback
+        traceback.print_exc()  # This prints the full traceback
         from flask import current_app
         current_app.logger.error(f"Error creating taxonomy: {e}")
         continue
@@ -365,6 +367,8 @@ class BrackenResult(db.Model):
         result = BrackenResult.create_from_dict(user_id, bracken_data)
         results.append(result)
       except Exception as e:
+        import traceback
+        traceback.print_exc()  # This prints the full traceback
         from flask import current_app
         current_app.logger.error(f"Error creating bracken result: {e}")
         continue
