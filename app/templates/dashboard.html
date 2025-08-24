@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - MVA2{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-3">
+            <i class="bi bi-speedometer2"></i>
+            Dashboard
+            <small class="text-muted">Welcome back, {{ current_user.name or current_user.email }}</small>
+        </h1>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ patient_count }}</h4>
+                        <p class="card-text">Patients</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-people fs-1"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('main.patients') }}" class="text-white text-decoration-none">
+                    View all <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ analysis_count }}</h4>
+                        <p class="card-text">Analyses</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-bar-chart fs-1"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('main.analysis') }}" class="text-white text-decoration-none">
+                    View all <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ taxonomy_count }}</h4>
+                        <p class="card-text">Taxonomies</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-tree fs-1"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('main.taxonomy') }}" class="text-white text-decoration-none">
+                    View all <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title" id="dataStatusCount">0</h4>
+                        <p class="card-text">Data Status</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-database fs-1"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('main.data_upload') }}" class="text-dark text-decoration-none">
+                    Manage data <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning"></i> Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <a href="{{ url_for('main.new_patient') }}" class="btn btn-outline-primary w-100 mb-2">
+                            <i class="bi bi-person-plus"></i><br>
+                            Add Patient
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ url_for('main.data_upload') }}" class="btn btn-outline-success w-100 mb-2">
+                            <i class="bi bi-upload"></i><br>
+                            Upload Data
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ url_for('main.new_analysis') }}" class="btn btn-outline-info w-100 mb-2">
+                            <i class="bi bi-graph-up"></i><br>
+                            New Analysis
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ url_for('main.reports') }}" class="btn btn-outline-warning w-100 mb-2">
+                            <i class="bi bi-file-earmark-text"></i><br>
+                            Generate Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity and Charts -->
+<div class="row">
+    <!-- Recent Analyses -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-clock-history"></i> Recent Analyses
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_analyses %}
+                <div class="list-group list-group-flush">
+                    {% for analysis in recent_analyses %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">{{ analysis.name }}</h6>
+                            <small class="text-muted">
+                                Type: {{ analysis.analysis_type.value if analysis.analysis_type else 'Unknown' }}
+                                <br>
+                                Created: {{ analysis.created_at.strftime('%Y-%m-%d %H:%M') if analysis.created_at else 'Unknown' }}
+                            </small>
+                        </div>
+                        <div>
+                            <span class="badge bg-{{ 'success' if analysis.status.value == 'completed' else 'warning' if analysis.status.value == 'running' else 'secondary' }}">
+                                {{ analysis.status.value.title() if analysis.status else 'Unknown' }}
+                            </span>
+                            <a href="{{ url_for('main.analysis_detail', analysis_id=analysis.id) }}" class="btn btn-sm btn-outline-primary ms-2">
+                                View
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-bar-chart fs-1 text-muted"></i>
+                    <p class="text-muted mt-2">No analyses yet</p>
+                    <a href="{{ url_for('main.new_analysis') }}" class="btn btn-primary">
+                        Create Your First Analysis
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Data Overview Chart -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-pie-chart"></i> Data Overview
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="dataOverviewChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity Timeline -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-activity"></i> Activity Timeline
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="activityTimeline">
+                    <!-- Timeline content will be loaded via JavaScript -->
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-2">Loading activity timeline...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Data Overview Chart
+    const ctx = document.getElementById('dataOverviewChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Patients', 'Analyses', 'Taxonomies'],
+            datasets: [{
+                data: [{{ patient_count }}, {{ analysis_count }}, {{ taxonomy_count }}],
+                backgroundColor: [
+                    '#0d6efd',
+                    '#198754', 
+                    '#0dcaf0'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+    
+    // Load quick stats and activity timeline
+    loadQuickStats();
+    loadActivityTimeline();
+});
+
+function loadQuickStats() {
+    fetch('/api/quick-stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error loading stats:', data.error);
+                return;
+            }
+            
+            // Update data status count (could be file count, processing status, etc.)
+            document.getElementById('dataStatusCount').textContent = 'Ready';
+        })
+        .catch(error => {
+            console.error('Error loading quick stats:', error);
+        });
+}
+
+function loadActivityTimeline() {
+    // Simulate loading recent activity
+    setTimeout(() => {
+        const timeline = document.getElementById('activityTimeline');
+        timeline.innerHTML = `
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-marker bg-primary"></div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Welcome to MVA2!</h6>
+                        <p class="text-muted mb-0">
+                            <small>Start by uploading your patient and microbiome data</small>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }, 1000);
+}
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -2rem;
+    top: 0.25rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: -1.625rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #dee2e6;
+}
+</style>
+{% endblock %}
