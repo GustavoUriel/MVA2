@@ -85,12 +85,13 @@ class PatientList(Resource):
 
       # Apply search filter
       if search:
-        search_term = f'%{search}%'
+        # Sanitize search term to prevent SQL injection
+        search_term = f'%{search.replace("%", "\\%").replace("_", "\\_")}%'
         query = query.filter(
             or_(
-                Patient.patient_id.ilike(search_term),
-                Patient.race.ilike(search_term),
-                Patient.stage.ilike(search_term)
+                Patient.patient_id.ilike(search_term, escape='\\'),
+                Patient.race.ilike(search_term, escape='\\'),
+                Patient.stage.ilike(search_term, escape='\\')
             )
         )
 
