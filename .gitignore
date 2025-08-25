@@ -2,3 +2,8 @@
 /.venv
 /venv
 prompts.*
+*.xlsx
+*.log
+*.csv
+__pycache__/
+*.pyc
