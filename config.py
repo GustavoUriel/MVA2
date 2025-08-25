@@ -5,10 +5,13 @@ from datetime import timedelta
 
 class Config:
   # Basic Flask settings
-  SECRET_KEY = os.environ.get(
-      'SECRET_KEY') or 'dev-secret-key-change-in-production'
-  WTF_CSRF_SECRET_KEY = os.environ.get(
-      'WTF_CSRF_SECRET_KEY') or 'csrf-secret-key'
+  SECRET_KEY = os.environ.get('SECRET_KEY')
+  if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable must be set")
+  
+  WTF_CSRF_SECRET_KEY = os.environ.get('WTF_CSRF_SECRET_KEY')
+  if not WTF_CSRF_SECRET_KEY:
+    raise ValueError("WTF_CSRF_SECRET_KEY environment variable must be set")
 
   # Database settings
   SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///app.db'
@@ -86,6 +89,10 @@ class Config:
 class DevelopmentConfig(Config):
   DEBUG = True
   TESTING = False
+  
+  # Allow default secrets for development only
+  SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+  WTF_CSRF_SECRET_KEY = os.environ.get('WTF_CSRF_SECRET_KEY') or 'csrf-secret-key'
 
 
 class ProductionConfig(Config):
