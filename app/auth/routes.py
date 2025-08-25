@@ -191,35 +191,92 @@ def login_authorized():
                  for k, v in user_info.items()}
     current_app.logger.info(f"User info (redacted): {safe_info}")
 
-    # Find or create user
+    # Step 5: Find or create user
+    log_auth('AUTH_STEP5', user_info['email'], True, "Looking up user in database")
     user = User.query.filter_by(email=user_info['email']).first()
+    
     if not user:
-      # Use helper to ensure unique username and defaults
-      log_auth('USER_CREATION', user_info['email'], True, f"New user from Google: {user_info.get('name')}")
-      user = User.create_from_google(user_info)
+      # Create new user
+      log_auth('USER_CREATION_START', user_info['email'], True, 
+              f"Creating new user from Google: {user_info.get('name')}")
+      try:
+        user = User.create_from_google(user_info)
+        log_auth('USER_CREATION_SUCCESS', user_info['email'], True, 
+                f"New user created: ID={user.id}, username={user.username}")
+      except Exception as create_error:
+        log_auth('USER_CREATION_FAILED', user_info['email'], False, 
+                f"User creation failed: {str(create_error)}")
+        user_logger.log_error('auth', create_error, 'User creation from Google')
+        raise
     else:
       # Update existing user fields
-      log_auth('USER_UPDATE', user_info['email'], True, f"Updating existing user: {user.username}")
-      user.first_name = user_info.get('given_name') or user.first_name
-      user.last_name = user_info.get('family_name') or user.last_name
-      user.profile_picture_url = user_info.get(
-          'picture') or user.profile_picture_url
-      user.google_id = user_info.get('sub') or user.google_id
-      user.is_verified = bool(user_info.get('email_verified'))
-      db.session.commit()
+      log_auth('USER_UPDATE_START', user_info['email'], True, 
+              f"Updating existing user: ID={user.id}, username={user.username}")
+      
+      # Track what fields are being updated
+      updates = []
+      if user_info.get('given_name') and user_info.get('given_name') != user.first_name:
+        updates.append(f"first_name: '{user.first_name}' -> '{user_info.get('given_name')}'")
+        user.first_name = user_info.get('given_name')
+      
+      if user_info.get('family_name') and user_info.get('family_name') != user.last_name:
+        updates.append(f"last_name: '{user.last_name}' -> '{user_info.get('family_name')}'")
+        user.last_name = user_info.get('family_name')
+      
+      if user_info.get('picture') and user_info.get('picture') != user.profile_picture_url:
+        updates.append("profile_picture_url: updated")
+        user.profile_picture_url = user_info.get('picture')
+      
+      if user_info.get('sub') and user_info.get('sub') != user.google_id:
+        updates.append(f"google_id: updated")
+        user.google_id = user_info.get('sub')
+      
+      new_verified = bool(user_info.get('email_verified'))
+      if new_verified != user.is_verified:
+        updates.append(f"is_verified: {user.is_verified} -> {new_verified}")
+        user.is_verified = new_verified
+      
+      if updates:
+        log_auth('USER_UPDATE_FIELDS', user.email, True, f"Fields updated: {', '.join(updates)}")
+        try:
+          db.session.commit()
+          log_auth('USER_UPDATE_SUCCESS', user.email, True, "User fields updated successfully")
+        except Exception as update_error:
+          log_auth('USER_UPDATE_FAILED', user.email, False, f"Database update failed: {str(update_error)}")
+          user_logger.log_error('auth', update_error, 'User field update')
+          raise
+      else:
+        log_auth('USER_UPDATE_NONE', user.email, True, "No fields needed updating")
 
-    # Log in the user
-    login_user(user, remember=True)
-    log_auth('LOGIN_SUCCESS', user.email, True, f"IP: {request.remote_addr}, Role: {user.role}")
+    # Step 6: Log in the user
+    log_auth('LOGIN_PROCESS_START', user.email, True, f"Beginning login process for user ID={user.id}")
     
-    # Update last_login timestamp
+    try:
+      login_user(user, remember=True)
+      log_auth('LOGIN_SUCCESS', user.email, True, 
+              f"User logged in successfully - IP: {request.remote_addr}, Role: {user.role}, User ID: {user.id}")
+    except Exception as login_error:
+      log_auth('LOGIN_PROCESS_FAILED', user.email, False, f"Flask-Login failed: {str(login_error)}")
+      user_logger.log_error('auth', login_error, 'Flask-Login process')
+      raise
+    
+    # Step 7: Update last_login timestamp
+    log_auth('LOGIN_TIMESTAMP_UPDATE', user.email, True, "Updating last login timestamp")
     try:
       from datetime import datetime
+      old_timestamp = user.last_login
       user.last_login = datetime.utcnow()
       db.session.commit()
-    except Exception as e2:
-      log_auth('LOGIN_TIMESTAMP_ERROR', user.email, False, f"Failed updating last_login: {str(e2)}")
-      user_logger.log_error('auth', e2, 'Login timestamp update')
+      log_auth('LOGIN_TIMESTAMP_SUCCESS', user.email, True, 
+              f"Last login updated: {old_timestamp} -> {user.last_login}")
+    except Exception as timestamp_error:
+      log_auth('LOGIN_TIMESTAMP_ERROR', user.email, False, 
+              f"Failed updating last_login: {str(timestamp_error)}")
+      user_logger.log_error('auth', timestamp_error, 'Login timestamp update')
+      # Don't fail the login for timestamp errors
+    
+    log_auth('LOGIN_COMPLETE', user.email, True, 
+            f"Login process completed successfully - redirecting to dashboard")
     
     flash('Logged in successfully.', 'success')
     return redirect(url_for('main.dashboard'))
