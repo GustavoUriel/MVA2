@@ -28,3 +28,19 @@ except Exception as e:
   traceback.print_exc()  # This prints the full traceback
   # Defer errors to runtime logs
   pass
+
+try:
+  from .patients import patients_ns
+  api.add_namespace(patients_ns, path='/patients')
+except Exception as e:
+  import traceback
+  traceback.print_exc()
+  pass
+
+try:
+  from .uploads import uploads_ns
+  api.add_namespace(uploads_ns, path='/uploads')
+except Exception as e:
+  import traceback
+  traceback.print_exc()
+  pass

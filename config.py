@@ -5,10 +5,8 @@ from datetime import timedelta
 
 class Config:
   # Basic Flask settings
-  SECRET_KEY = os.environ.get(
-      'SECRET_KEY') or 'dev-secret-key-change-in-production'
-  WTF_CSRF_SECRET_KEY = os.environ.get(
-      'WTF_CSRF_SECRET_KEY') or 'csrf-secret-key'
+  SECRET_KEY = os.environ.get('SECRET_KEY')
+  WTF_CSRF_SECRET_KEY = os.environ.get('WTF_CSRF_SECRET_KEY')
 
   # Database settings
   SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///app.db'
@@ -87,10 +85,25 @@ class DevelopmentConfig(Config):
   DEBUG = True
   TESTING = False
 
+  # Allow default secrets for development only
+  SECRET_KEY = os.environ.get(
+      'SECRET_KEY') or 'dev-secret-key-change-in-production'
+  WTF_CSRF_SECRET_KEY = os.environ.get(
+      'WTF_CSRF_SECRET_KEY') or 'csrf-secret-key'
+
 
 class ProductionConfig(Config):
   DEBUG = False
   TESTING = False
+
+  # Require environment variables in production
+  def __init__(self):
+    if not self.SECRET_KEY:
+      raise ValueError(
+          "SECRET_KEY environment variable must be set in production")
+    if not self.WTF_CSRF_SECRET_KEY:
+      raise ValueError(
+          "WTF_CSRF_SECRET_KEY environment variable must be set in production")
   SESSION_COOKIE_SECURE = True
 
 
@@ -324,10 +337,15 @@ patients_table_columns_name = [
     'fluconazole', 'fluconazole_eng',
     'start_date', 'end_date', 'start_dateeng', 'end_dateeng'
 ]
+
+patients_table_identificatos = {'age', 'gender', 'race'}
+
 taxonomy_table_columns_name = [
     'asv', 'taxonomy', 'domain', 'phylum', 'class',
     'order', 'family', 'genus', 'species'
 ]
+taxonomy_table_identificatos = {'taxonomy', 'domain'}
+
 
 # Advanced Statistical Configuration
 SURVIVAL_ANALYSIS_CONFIG = {

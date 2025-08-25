@@ -173,17 +173,32 @@ class User(UserMixin, db.Model):
 
   def add_saved_view(self, name, parameters, description=None):
     """Add a new saved view"""
+    # Validate and sanitize the name to prevent path traversal
+    if not name or not isinstance(name, str):
+      raise ValueError("Invalid view name")
+    
+    # Remove any path separators and dangerous characters
+    safe_name = "".join(c for c in name if c.isalnum() or c in ('-', '_')).strip()
+    if not safe_name:
+      raise ValueError("View name must contain valid characters")
+    
     views = self.get_saved_views()
     view_data = {
-        'name': name,
+        'name': safe_name,
         'parameters': parameters,
         'description': description,
         'created_at': datetime.utcnow().isoformat(),
-        'file_path': os.path.join(self.get_user_folder(), f'view_{name}.json')
+        'file_path': os.path.join(self.get_user_folder(), f'view_{safe_name}.json')
     }
 
+    # Ensure the file path is within the user's directory
+    user_folder = self.get_user_folder()
+    file_path = view_data['file_path']
+    if not os.path.commonpath([user_folder]) == os.path.commonpath([user_folder, file_path]):
+      raise ValueError("Invalid file path")
+
     # Save parameters to file
-    with open(view_data['file_path'], 'w') as f:
+    with open(file_path, 'w') as f:
       json.dump(parameters, f, indent=2)
 
     views.append(view_data)
@@ -192,14 +207,27 @@ class User(UserMixin, db.Model):
 
   def delete_saved_view(self, name):
     """Delete a saved view"""
+    # Validate and sanitize the name to prevent path traversal
+    if not name or not isinstance(name, str):
+      raise ValueError("Invalid view name")
+    
+    # Remove any path separators and dangerous characters
+    safe_name = "".join(c for c in name if c.isalnum() or c in ('-', '_')).strip()
+    if not safe_name:
+      raise ValueError("View name must contain valid characters")
+    
     views = self.get_saved_views()
-    views = [v for v in views if v['name'] != name]
+    views = [v for v in views if v['name'] != safe_name]
     self.saved_views = json.dumps(views)
 
-    # Delete file
-    view_file = os.path.join(self.get_user_folder(), f'view_{name}.json')
-    if os.path.exists(view_file):
-      os.remove(view_file)
+    # Delete file with path validation
+    user_folder = self.get_user_folder()
+    view_file = os.path.join(user_folder, f'view_{safe_name}.json')
+    
+    # Ensure the file path is within the user's directory
+    if os.path.commonpath([user_folder]) == os.path.commonpath([user_folder, view_file]):
+      if os.path.exists(view_file):
+        os.remove(view_file)
 
     db.session.commit()
 

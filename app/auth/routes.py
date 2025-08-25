@@ -8,23 +8,29 @@ from flask_login import login_user, logout_user, current_user
 from . import bp
 from ..models.user import User
 from .. import db
+from ..utils.logging_utils import log_function, log_auth, user_logger
 
 
 @bp.route('/login')
+@log_function('auth')
 def login():
   """Login page"""
   if current_user.is_authenticated:
+    log_auth('LOGIN_PAGE_VISITED', current_user.email, True, 'Already authenticated, redirected to dashboard')
     return redirect(url_for('main.dashboard'))
+  
+  log_auth('LOGIN_PAGE_VISITED', request.remote_addr, True, 'Login page accessed')
   return render_template('auth/login.html')
 
 
 @bp.route('/logout')
+@log_function('auth')
 def logout():
   """Logout user"""
   try:
     if current_user.is_authenticated:
       user_email = current_user.email
-      current_app.logger.info(f"Logging out user: {user_email}")
+      log_auth('LOGOUT_INITIATED', user_email, True, f'IP: {request.remote_addr}')
 
       # Clear Flask-Login session
       logout_user()
@@ -32,7 +38,7 @@ def logout():
       # Clear all session data
       session.clear()
 
-      current_app.logger.info(f"User logged out successfully: {user_email}")
+      log_auth('LOGOUT_COMPLETED', user_email, True, 'Session cleared successfully')
 
       # Show logout page that handles Google logout and redirect
       response = make_response(render_template('logout.html'))
@@ -43,14 +49,16 @@ def logout():
       return response
     else:
       # User wasn't logged in, redirect directly to home
+      log_auth('LOGOUT_ATTEMPTED', request.remote_addr, False, 'User not authenticated')
       response = make_response(redirect(url_for('main.index')))
       response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
       response.headers['Pragma'] = 'no-cache'
       response.headers['Expires'] = '0'
       return response
   except Exception as e:
-    traceback.print_exc()  # This prints the full traceback
-    current_app.logger.error(f"Logout error: {e}")
+    user_email = current_user.email if current_user.is_authenticated else 'unknown'
+    log_auth('LOGOUT_ERROR', user_email, False, f'Error: {str(e)}')
+    user_logger.log_error('auth', e, 'Logout process')
     flash('Error during logout.', 'error')
     return redirect(url_for('main.index'))
 
@@ -82,41 +90,47 @@ def force_logout():
 
 
 @bp.route('/google')
+@log_function('auth')
 def google_auth():
   """Google OAuth authentication"""
   try:
+    log_auth('GOOGLE_AUTH_INITIATED', request.remote_addr, True, f'IP: {request.remote_addr}')
+    
     # Get OAuth from current app extensions
     oauth = current_app.extensions.get('authlib.integrations.flask_client')
     if not oauth:
+      log_auth('GOOGLE_AUTH_CONFIG_ERROR', request.remote_addr, False, 'OAuth not properly configured')
       flash('OAuth not properly configured', 'error')
       return redirect(url_for('main.index'))
 
     google = oauth._clients.get('google')
     if not google:
+      log_auth('GOOGLE_AUTH_CONFIG_ERROR', request.remote_addr, False, 'Google OAuth client not configured')
       flash('Google OAuth client not configured', 'error')
       return redirect(url_for('main.index'))
 
     # Generate redirect URI using the configured endpoint
     redirect_uri = url_for('auth.login_authorized', _external=True)
 
-    current_app.logger.info(
-        f"Initiating Google OAuth with redirect URI: {redirect_uri}")
+    log_auth('GOOGLE_AUTH_REDIRECT', request.remote_addr, True, f'Redirect URI: {redirect_uri}')
 
     # Redirect to Google OAuth
     return google.authorize_redirect(redirect_uri)
 
   except Exception as e:
-    traceback.print_exc()  # This prints the full traceback
-    current_app.logger.error(f"Google OAuth initiation error: {e}")
+    log_auth('GOOGLE_AUTH_ERROR', request.remote_addr, False, f'Error: {str(e)}')
+    user_logger.log_error('auth', e, 'Google OAuth initiation')
     flash(f'Google authentication error: {str(e)}', 'error')
     return redirect(url_for('main.index'))
 
 
 @bp.route('/login/authorized')
+@log_function('auth')
 def login_authorized():
   """Google OAuth callback"""
 
   try:
+    log_auth('GOOGLE_CALLBACK_RECEIVED', request.remote_addr, True, f'IP: {request.remote_addr}')
     # Get OAuth from current app extensions
     oauth = current_app.extensions.get('authlib.integrations.flask_client')
     if not oauth:
@@ -131,9 +145,10 @@ def login_authorized():
     # Handle the callback
     token = google.authorize_access_token()
     if not token:
+      log_auth('GOOGLE_TOKEN_ERROR', request.remote_addr, False, 'No token returned from Google')
       raise RuntimeError('No token returned from Google')
 
-    current_app.logger.info(f"Received token keys: {list(token.keys())}")
+    log_auth('GOOGLE_TOKEN_RECEIVED', request.remote_addr, True, f"Token keys: {list(token.keys())}")
 
     # Prefer ID token claims (no extra HTTP request)
     user_info = None
@@ -180,9 +195,11 @@ def login_authorized():
     user = User.query.filter_by(email=user_info['email']).first()
     if not user:
       # Use helper to ensure unique username and defaults
+      log_auth('USER_CREATION', user_info['email'], True, f"New user from Google: {user_info.get('name')}")
       user = User.create_from_google(user_info)
     else:
       # Update existing user fields
+      log_auth('USER_UPDATE', user_info['email'], True, f"Updating existing user: {user.username}")
       user.first_name = user_info.get('given_name') or user.first_name
       user.last_name = user_info.get('family_name') or user.last_name
       user.profile_picture_url = user_info.get(
@@ -193,18 +210,22 @@ def login_authorized():
 
     # Log in the user
     login_user(user, remember=True)
+    log_auth('LOGIN_SUCCESS', user.email, True, f"IP: {request.remote_addr}, Role: {user.role}")
+    
     # Update last_login timestamp
     try:
       from datetime import datetime
       user.last_login = datetime.utcnow()
       db.session.commit()
     except Exception as e2:
-      traceback.print_exc()  # This prints the full traceback
-      current_app.logger.warning(f"Failed updating last_login: {e2}")
+      log_auth('LOGIN_TIMESTAMP_ERROR', user.email, False, f"Failed updating last_login: {str(e2)}")
+      user_logger.log_error('auth', e2, 'Login timestamp update')
+    
     flash('Logged in successfully.', 'success')
     return redirect(url_for('main.dashboard'))
   except Exception as e:
-    traceback.print_exc()  # This prints the full traceback
-    current_app.logger.error(f"Error during Google OAuth callback: {e}")
+    email = user_info.get('email') if 'user_info' in locals() else 'unknown'
+    log_auth('LOGIN_FAILED', email, False, f"OAuth callback error: {str(e)}")
+    user_logger.log_error('auth', e, 'Google OAuth callback')
     flash('Authentication failed.', 'error')
     return redirect(url_for('main.index'))

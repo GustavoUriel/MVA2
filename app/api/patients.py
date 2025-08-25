@@ -10,7 +10,7 @@ from flask_restx import Namespace, Resource, fields
 from flask_login import login_required, current_user
 from sqlalchemy import and_, or_
 
-from app.models import Patient
+from app.models.patient import Patient
 from app import db
 from app.utils.validators import validate_patient_data
 from app.utils.data_export import export_patients_to_csv
@@ -85,12 +85,13 @@ class PatientList(Resource):
 
       # Apply search filter
       if search:
-        search_term = f'%{search}%'
+        # Sanitize search term to prevent SQL injection
+        search_term = f'%{search.replace("%", "\\%").replace("_", "\\_")}%'
         query = query.filter(
             or_(
-                Patient.patient_id.ilike(search_term),
-                Patient.race.ilike(search_term),
-                Patient.stage.ilike(search_term)
+                Patient.patient_id.ilike(search_term, escape='\\'),
+                Patient.race.ilike(search_term, escape='\\'),
+                Patient.stage.ilike(search_term, escape='\\')
             )
         )
 

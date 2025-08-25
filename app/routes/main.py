@@ -8,6 +8,7 @@ import traceback
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, make_response
 from flask_login import login_required, current_user
 from .. import db
+from ..utils.logging_utils import log_function, user_logger
 
 main_bp = Blueprint('main', __name__)
 
@@ -115,14 +116,14 @@ def analysis():
 
 @main_bp.route('/data-upload')
 @login_required
+@log_function('user_events')
 def data_upload():
   """Data upload page"""
   try:
-    # TODO: Implement data upload logic
+    user_logger.log_user_event('Data upload page accessed', user=current_user.email, ip=request.remote_addr)
     return render_template('data_upload.html')
   except Exception as e:
-    traceback.print_exc()  # This prints the full traceback
-    current_app.logger.error(f"Data upload page error: {e}")
+    user_logger.log_error('user_events', e, 'Data upload page access')
     flash(f"Error loading data upload: {str(e)}", 'error')
     return redirect(url_for('main.dashboard'))
 

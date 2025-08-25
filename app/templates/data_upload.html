@@ -24,9 +24,10 @@
                                 <div class="text-center">
                                     <i class="bi bi-cloud-upload display-4 text-muted mb-3"></i>
                                     <h6>Drag & drop patient files here</h6>
-                                    <p class="text-muted">or <button class="btn btn-link p-0">browse files</button></p>
+                                    <p class="text-muted">or <button class="btn btn-link p-0" id="patientBrowseBtn" type="button">browse files</button></p>
                                     <small class="text-muted">Supports CSV, Excel (.xlsx)</small>
                                 </div>
+                                <input type="file" id="patientFileInput" accept=".csv,.xlsx,.xls" class="d-none" />
                             </div>
                         </div>
                     </div>
@@ -47,9 +48,10 @@
                                 <div class="text-center">
                                     <i class="bi bi-cloud-upload display-4 text-muted mb-3"></i>
                                     <h6>Drag & drop microbiome files here</h6>
-                                    <p class="text-muted">or <button class="btn btn-link p-0">browse files</button></p>
+                                    <p class="text-muted">or <button class="btn btn-link p-0" id="microbiomeBrowseBtn" type="button">browse files</button></p>
                                     <small class="text-muted">Supports Bracken output, CSV, TSV</small>
                                 </div>
+                                <input type="file" id="microbiomeFileInput" accept=".csv,.xlsx,.xls,.tsv" class="d-none" />
                             </div>
                         </div>
                     </div>
@@ -107,4 +109,84 @@
     background-color: rgba(13, 110, 253, 0.1);
 }
 </style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const patientDrop = document.getElementById('patientUploadArea');
+  const patientInput = document.getElementById('patientFileInput');
+  const patientBrowse = document.getElementById('patientBrowseBtn');
+
+  const microDrop = document.getElementById('microbiomeUploadArea');
+  const microInput = document.getElementById('microbiomeFileInput');
+  const microBrowse = document.getElementById('microbiomeBrowseBtn');
+
+  function onAnalyze(files, type) {
+    // Analyze first file only for UI confirmation
+    const file = files[0];
+    MVA2.upload.uploadFiles([file], '/uploads/analyze', (name, p)=>{}).then((respArr) => {
+      const resp = respArr[0];
+      if (!resp || resp.message) {
+        MVA2.utils.showToast(resp && resp.message ? resp.message : 'Analyze failed', 'danger');
+        return;
+      }
+
+      // Show confirmation per sheet
+      (resp.sheets || []).forEach(sheet => {
+        const msg = `Import sheet ${sheet.sheet_name} from file ${resp.file_name} that has ${sheet.detected_type} type of data?`;
+        if (confirm(msg)) {
+          // Build selections with defaults: apply proposed renames, keep first among duplicates
+          const selections = {};
+          const duplicate_keep = {};
+          Object.keys(sheet.duplicates || {}).forEach(name => {
+            duplicate_keep[name] = 0; // keep first by default; UI could be enhanced later
+          });
+          selections[sheet.sheet_name] = {
+            confirmed: true,
+            header_mode: sheet.header_mode,
+            renames: sheet.proposed_renames || {},
+            duplicate_keep: duplicate_keep,
+            detected_type: sheet.detected_type
+          };
+
+          // Post import command
+          MVA2.api.post('/uploads/import', {
+            file_name: resp.file_name,
+            file_type: resp.file_type,
+            selections: selections
+          }).then(() => {
+            MVA2.utils.showToast('Import completed', 'success');
+          }).catch((e) => {
+            console.error(e);
+          });
+        }
+      });
+    }).catch(err => {
+      console.error(err);
+      MVA2.utils.showToast('Upload/analyze failed', 'danger');
+    });
+  }
+
+  if (patientDrop && patientInput) {
+    MVA2.upload.initDragDrop(patientDrop, patientInput, (files) => onAnalyze(files, 'patients'));
+  }
+  if (patientBrowse && patientInput) {
+    patientBrowse.addEventListener('click', function(ev) {
+      ev.preventDefault();
+      patientInput.click();
+    });
+  }
+
+  if (microDrop && microInput) {
+    MVA2.upload.initDragDrop(microDrop, microInput, (files) => onAnalyze(files, 'microbiome'));
+  }
+  if (microBrowse && microInput) {
+    microBrowse.addEventListener('click', function(ev) {
+      ev.preventDefault();
+      microInput.click();
+    });
+  }
+});
+</script>
 {% endblock %}

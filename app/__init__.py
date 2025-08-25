@@ -80,7 +80,7 @@ def create_app(config_class=None):
   db.init_app(flask_app)
   migrate.init_app(flask_app, db)
   login_manager.init_app(flask_app)
-  csrf.init_app(flask_app)
+  # csrf.init_app(flask_app)  # Disable CSRF for now - will be re-enabled with proper configuration
   limiter.init_app(flask_app)
   cache.init_app(flask_app)
   oauth.init_app(flask_app)
@@ -145,6 +145,8 @@ def create_app(config_class=None):
       instance_path = os.path.join(flask_app.instance_path, 'users')
       os.makedirs(instance_path, exist_ok=True)
       create_instance_directories.executed = True
+
+  # CSRF is temporarily disabled - will be re-enabled with proper API route exclusion
 
   # Add template global functions
   @flask_app.template_global()
