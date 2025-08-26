@@ -140,11 +140,11 @@
         document.getElementById('progressContainer').style.display = 'block';
         document.getElementById('importBtn').disabled = true;
         document.getElementById('cancelBtn').disabled = true;
-        
+
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
-        
-        // Simulate progress stages
+
+        // Step 1: Upload file to /analyze
         progressText.textContent = 'Uploading file...';
         progressBar.style.width = '20%';
         progressBar.setAttribute('aria-valuenow', '20');
@@ -152,40 +152,73 @@
         const formData = new FormData();
         formData.append('file', file);
 
-        fetch('/api/v1/uploads/import-taxonomy', {
+        fetch('/api/v1/uploads/analyze', {
             method: 'POST',
             body: formData,
             credentials: 'same-origin'
         })
-        .then(response => {
+        .then(response => response.json())
+        .then(analyzeData => {
+            if (!analyzeData.file_name || !analyzeData.file_type) {
+                throw new Error(analyzeData.message || 'File analysis failed.');
+            }
             progressText.textContent = 'Processing data...';
             progressBar.style.width = '60%';
             progressBar.setAttribute('aria-valuenow', '60');
-            return response.json();
+
+            // Step 2: Import using /import endpoint
+            // For simple CSV, auto-select first sheet or pass empty selections
+            let selections = {};
+            if (Array.isArray(analyzeData.sheets) && analyzeData.sheets.length > 0) {
+                // If only one sheet, auto-confirm it
+                const sheet = analyzeData.sheets[0];
+                selections[sheet.sheet_name || 'Sheet1'] = {
+                    confirmed: true,
+                    header_mode: sheet.header_mode || 'auto',
+                    detected_type: sheet.detected_type || 'taxonomy',
+                    renames: sheet.proposed_renames || {},
+                    duplicate_keep: sheet.duplicates ? Object.keys(sheet.duplicates) : [],
+                };
+            }
+
+            return fetch('/api/v1/uploads/import', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    file_name: analyzeData.file_name,
+                    file_type: analyzeData.file_type,
+                    selections: selections
+                })
+            });
         })
+        .then(response => response.json())
         .then(data => {
             progressText.textContent = 'Finalizing import...';
             progressBar.style.width = '100%';
             progressBar.setAttribute('aria-valuenow', '100');
-            
+
             setTimeout(() => {
                 document.getElementById('progressContainer').style.display = 'none';
                 document.getElementById('importResults').style.display = 'block';
-                
+
                 const resultAlert = document.getElementById('resultAlert');
                 const resultMessage = document.getElementById('resultMessage');
                 const resultDetails = document.getElementById('resultDetails');
-                
-                if (data.status === 'ok') {
+
+                const msg = (data.message || '').toLowerCase();
+                if (data.status === 'ok' || msg.includes('import completed')) {
                     resultAlert.className = 'alert alert-success';
                     resultMessage.innerHTML = '<i class="fas fa-check-circle"></i> Import completed successfully!';
-                    resultDetails.textContent = `Added ${data.added} taxonomy records to the database.`;
+                    resultDetails.textContent = data.message || `Added ${data.added || ''} taxonomy records to the database.`;
                 } else {
                     resultAlert.className = 'alert alert-danger';
                     resultMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Import failed';
                     resultDetails.textContent = data.message || 'Unknown error occurred during import.';
                 }
-                
+
                 document.getElementById('cancelBtn').style.display = 'none';
                 document.getElementById('importBtn').style.display = 'none';
                 document.getElementById('doneBtn').style.display = 'inline-block';
@@ -196,19 +229,19 @@
             progressBar.style.width = '100%';
             progressBar.classList.remove('progress-bar-animated');
             progressBar.classList.add('bg-danger');
-            
+
             setTimeout(() => {
                 document.getElementById('progressContainer').style.display = 'none';
                 document.getElementById('importResults').style.display = 'block';
-                
+
                 const resultAlert = document.getElementById('resultAlert');
                 const resultMessage = document.getElementById('resultMessage');
                 const resultDetails = document.getElementById('resultDetails');
-                
+
                 resultAlert.className = 'alert alert-danger';
                 resultMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Import failed';
                 resultDetails.textContent = `Error: ${error.message || 'Network error or server unavailable.'}`;
-                
+
                 document.getElementById('cancelBtn').style.display = 'none';
                 document.getElementById('importBtn').style.display = 'none';
                 document.getElementById('doneBtn').style.display = 'inline-block';
