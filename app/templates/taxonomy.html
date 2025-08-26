@@ -8,12 +8,84 @@
         <div class="col-md-12">
             <h2><i class="fas fa-sitemap"></i> Taxonomy Management</h2>
             
-            <div class="mb-3">
+            <div class="mb-3 d-flex gap-2">
                 <button type="button" class="btn btn-primary" onclick="importTaxonomy()">
                     <i class="fas fa-upload"></i> Import Taxonomy
                 </button>
+                <button type="button" class="btn btn-secondary" onclick="loadDefaultTaxonomy()">
+                    <i class="fas fa-database"></i> Load Default Data
+                </button>
                 <input type="file" id="taxonomyFileInput" accept=".csv,.xlsx,.xls" style="display: none;">
             </div>
+<script>
+    function loadDefaultTaxonomy() {
+        if (!confirm('Are you sure you want to load the default taxonomy data? This will overwrite current taxonomy records.')) {
+            return;
+        }
+        // Show modal and progress
+        const modal = new bootstrap.Modal(document.getElementById('importModal'));
+        document.getElementById('fileInfo').textContent = 'instance/taxonomy.csv (server default)';
+        document.getElementById('importBtn').style.display = 'none';
+        document.getElementById('cancelBtn').style.display = 'none';
+        document.getElementById('doneBtn').style.display = 'none';
+        document.getElementById('progressContainer').style.display = 'block';
+        document.getElementById('importResults').style.display = 'none';
+        document.getElementById('progressText').textContent = 'Loading default taxonomy...';
+        document.getElementById('progressBar').style.width = '20%';
+        document.getElementById('progressBar').setAttribute('aria-valuenow', '20');
+        modal.show();
+
+        fetch('/api/v1/uploads/import-default-taxonomy', {
+            method: 'POST',
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('progressText').textContent = 'Finalizing import...';
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressBar').setAttribute('aria-valuenow', '100');
+            setTimeout(() => {
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('importResults').style.display = 'block';
+                const resultAlert = document.getElementById('resultAlert');
+                const resultMessage = document.getElementById('resultMessage');
+                const resultDetails = document.getElementById('resultDetails');
+                const msg = (data.message || '').toLowerCase();
+                if (data.status === 'ok' || msg.includes('import completed')) {
+                    resultAlert.className = 'alert alert-success';
+                    resultMessage.innerHTML = '<i class="fas fa-check-circle"></i> Import completed successfully!';
+                    resultDetails.textContent = data.message || `Added ${data.added || ''} taxonomy records to the database.`;
+                } else {
+                    resultAlert.className = 'alert alert-danger';
+                    resultMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Import failed';
+                    resultDetails.textContent = data.message || 'Unknown error occurred during import.';
+                }
+                document.getElementById('cancelBtn').style.display = 'none';
+                document.getElementById('importBtn').style.display = 'none';
+                document.getElementById('doneBtn').style.display = 'inline-block';
+            }, 500);
+        })
+        .catch(error => {
+            document.getElementById('progressText').textContent = 'Import failed';
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressBar').classList.remove('progress-bar-animated');
+            document.getElementById('progressBar').classList.add('bg-danger');
+            setTimeout(() => {
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('importResults').style.display = 'block';
+                const resultAlert = document.getElementById('resultAlert');
+                const resultMessage = document.getElementById('resultMessage');
+                const resultDetails = document.getElementById('resultDetails');
+                resultAlert.className = 'alert alert-danger';
+                resultMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Import failed';
+                resultDetails.textContent = `Error: ${error.message || 'Network error or server unavailable.'}`;
+                document.getElementById('cancelBtn').style.display = 'none';
+                document.getElementById('importBtn').style.display = 'none';
+                document.getElementById('doneBtn').style.display = 'inline-block';
+            }, 500);
+        });
+    }
+</script>
 
             <!-- Import Modal -->
             <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">

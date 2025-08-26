@@ -178,12 +178,54 @@ class Taxonomy(db.Model):
     """Create taxonomy from dictionary data"""
     # Map column names using fuzzy matching if needed
     from app.utils.data_mapping import map_taxonomy_columns
+    from flask import current_app
+    import uuid
+
     mapped_data = map_taxonomy_columns(taxonomy_data)
 
+    # Ensure key fields exist and are sane
+    def _safe_str(v):
+      try:
+        if v is None:
+          return None
+        s = str(v).strip()
+        return s if s != '' else None
+      except Exception:
+        return None
+
+    for k in list(mapped_data.keys()):
+      mapped_data[k] = _safe_str(mapped_data[k])
+
+    # taxonomy_id is required by the model. Try common fallbacks.
+    if not mapped_data.get('taxonomy_id'):
+      if mapped_data.get('asv'):
+        mapped_data['taxonomy_id'] = mapped_data.get('asv')
+      elif mapped_data.get('full_taxonomy'):
+        # create a short stable id from the full taxonomy text
+        mapped_data['taxonomy_id'] = 'tx_' + \
+            str(abs(hash(mapped_data.get('full_taxonomy'))))[:12]
+      else:
+        # last resort: UUID-based id
+        mapped_data['taxonomy_id'] = 'tx_' + uuid.uuid4().hex[:8]
+
     taxonomy = Taxonomy(user_id=user_id, **mapped_data)
-    db.session.add(taxonomy)
-    db.session.commit()
-    return taxonomy
+    try:
+      db.session.add(taxonomy)
+      db.session.commit()
+      return taxonomy
+    except Exception as e:
+      # Rollback and log details to help debugging; re-raise so callers can track failures
+      try:
+        db.session.rollback()
+      except Exception:
+        pass
+      try:
+        current_app.logger.error(
+            f"Failed to create taxonomy for user {user_id}: {e}", exc_info=True)
+        current_app.logger.error(f"Sample data: {str(mapped_data)[:1000]}")
+      except Exception:
+        pass
+      raise
 
   @staticmethod
   def bulk_create_from_dataframe(user_id, df):

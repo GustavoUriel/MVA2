@@ -5,6 +5,7 @@ Handles the main web interface routes for the application.
 """
 
 from ..models.taxonomy import Taxonomy
+from app.utils.logging_utils import log_function, user_logger
 import traceback
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, make_response
 from flask_login import login_required, current_user
@@ -15,6 +16,7 @@ main_bp = Blueprint('main', __name__)
 
 
 @main_bp.route('/')
+@log_function('main')
 def index():
   """Home page"""
   # Force check authentication status
@@ -35,6 +37,7 @@ def index():
 
 @main_bp.route('/dashboard')
 @login_required
+@log_function('main')
 def dashboard():
   """Main dashboard"""
   try:
@@ -56,18 +59,21 @@ def dashboard():
 
 
 @main_bp.route('/about')
+@log_function('main')
 def about():
   """About page"""
   return render_template('about.html')
 
 
 @main_bp.route('/contact')
+@log_function('main')
 def contact():
   """Contact page"""
   return render_template('contact.html')
 
 
 @main_bp.route('/health')
+@log_function('main')
 def health():
   """Health check endpoint"""
   return jsonify({'status': 'healthy', 'message': 'MVA2 is running'})
@@ -75,6 +81,7 @@ def health():
 
 @main_bp.route('/patients')
 @login_required
+@log_function('main')
 def patients():
   """Patients management page"""
   try:
@@ -89,6 +96,7 @@ def patients():
 
 @main_bp.route('/taxonomy')
 @login_required
+@log_function('main')
 def taxonomy():
   """Taxonomy data page"""
   try:
@@ -103,6 +111,7 @@ def taxonomy():
 
 @main_bp.route('/analysis')
 @login_required
+@log_function('main')
 def analysis():
   """Analysis page"""
   try:
@@ -132,6 +141,7 @@ def data_upload():
 
 @main_bp.route('/reports')
 @login_required
+@log_function('main')
 def reports():
   """Reports page"""
   try:
@@ -146,6 +156,7 @@ def reports():
 
 @main_bp.route('/settings')
 @login_required
+@log_function('main')
 def settings():
   """User settings page"""
   try:
@@ -160,6 +171,7 @@ def settings():
 
 @main_bp.route('/patients/new')
 @login_required
+@log_function('main')
 def new_patient():
   """New patient form page"""
   try:
@@ -175,6 +187,7 @@ def new_patient():
 
 @main_bp.route('/analysis/new')
 @login_required
+@log_function('main')
 def new_analysis():
   """New analysis form page"""
   try:
@@ -190,6 +203,7 @@ def new_analysis():
 
 @main_bp.route('/api/quick-stats')
 @login_required
+@log_function('main')
 def quick_stats():
   """Quick statistics for dashboard widgets"""
   try:

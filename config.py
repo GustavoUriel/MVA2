@@ -55,6 +55,15 @@ class Config:
   # Logging settings
   LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
   LOG_FILE = os.environ.get('LOG_FILE', 'app.log')
+  # Toggle detailed per-function logging (set True for debug/testing)
+  LOG_VERBOSE_FUNCTIONS = os.environ.get(
+      'LOG_VERBOSE_FUNCTIONS', 'False').lower() == 'true'
+  # Maximum characters per log entry (sanitization truncates longer entries)
+  LOG_MAX_ENTRY_LENGTH = int(os.environ.get('LOG_MAX_ENTRY_LENGTH', 2000))
+  # Per-user log rotation settings
+  LOG_ROTATE_BYTES = int(os.environ.get(
+      'LOG_ROTATE_BYTES', 10 * 1024 * 1024))  # 10MB
+  LOG_ROTATE_BACKUP_COUNT = int(os.environ.get('LOG_ROTATE_BACKUP_COUNT', 5))
 
   # Rate limiting
   RATELIMIT_STORAGE_URL = os.environ.get(
@@ -104,6 +113,7 @@ class ProductionConfig(Config):
     if not self.WTF_CSRF_SECRET_KEY:
       raise ValueError(
           "WTF_CSRF_SECRET_KEY environment variable must be set in production")
+
   SESSION_COOKIE_SECURE = True
 
 

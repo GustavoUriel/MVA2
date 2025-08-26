@@ -238,6 +238,24 @@ python -m pytest --cov=app tests/
 python -m pytest tests/test_models.py
 ```
 
+### Developer helper: dev-login and import-default test
+
+For development convenience there is a dev-only authentication endpoint
+available when the app is run with DEBUG or TESTING enabled. It allows a
+test client to log in as a simple email and exercise endpoints that require
+authentication (this endpoint is gated and should not be used in production).
+
+To run the focused test for the "import default taxonomy" flow:
+
+```powershell
+$env:FLASK_ENV='testing'; $env:PYTHONPATH='.'; .\.venv\Scripts\pytest -q tests/test_import_default_flow.py
+```
+
+This test hits `/api/v1/auth/dev/login-as` then `/api/v1/uploads/import-default-taxonomy`.
+In testing mode the application will create a tiny sample `instance/taxonomy.csv`
+if the file is missing so the import flow can be exercised without manual setup.
+
+
 ### API Testing
 ```bash
 # Test API endpoints

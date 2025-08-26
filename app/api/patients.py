@@ -14,6 +14,7 @@ from app.models.patient import Patient
 from app import db
 from app.utils.validators import validate_patient_data
 from app.utils.data_export import export_patients_to_csv
+from app.utils.logging_utils import log_function
 
 patients_ns = Namespace('patients', description='Patient data operations')
 
@@ -69,6 +70,7 @@ class PatientList(Resource):
   @patients_ns.param('sex', 'Sex filter', type=str)
   @patients_ns.param('race', 'Race filter', type=str)
   @login_required
+  @log_function('patients')
   def get(self):
     """Get list of patients with optional filtering"""
     try:
@@ -85,32 +87,32 @@ class PatientList(Resource):
 
       # Apply search filter
       if search:
-        # Sanitize search term to prevent SQL injection
-        search_term = f'%{search.replace("%", "\\%").replace("_", "\\_")}%'
+        # Sanitize search term to prevent SQL injection - escape % and _ for LIKE
+        safe_search = search.replace('%', '\\%').replace('_', '\\_')
+        search_term = f"%{safe_search}%"
         query = query.filter(
             or_(
                 Patient.patient_id.ilike(search_term, escape='\\'),
                 Patient.race.ilike(search_term, escape='\\'),
-                Patient.stage.ilike(search_term, escape='\\')
+                Patient.gender.ilike(search_term, escape='\\')
             )
         )
 
       # Apply specific filters
       if stage_filter:
-        query = query.filter(Patient.stage == stage_filter)
+        # Older code used 'stage' field; model contains 'iss' and 'riss'
+        query = query.filter(
+            or_(Patient.iss == stage_filter, Patient.riss == stage_filter))
 
       if sex_filter:
-        query = query.filter(Patient.sex == sex_filter)
+        # Model uses 'gender' field
+        query = query.filter(Patient.gender == sex_filter)
 
       if race_filter:
         query = query.filter(Patient.race == race_filter)
 
       # Paginate results
-      pagination = query.paginate(
-          page=page,
-          per_page=per_page,
-          error_out=False
-      )
+      pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
       return {
           'patients': [patient.to_dict() for patient in pagination.items],
@@ -121,7 +123,7 @@ class PatientList(Resource):
       }
 
     except Exception as e:
-      traceback.print_exc()  # This prints the full traceback
+      traceback.print_exc()
       current_app.logger.error(f"Error fetching patients: {e}")
       return {'message': 'Failed to fetch patients'}, 500
 
@@ -129,6 +131,7 @@ class PatientList(Resource):
   @patients_ns.expect(patient_create_model)
   @patients_ns.marshal_with(patient_model)
   @login_required
+  @log_function('patients')
   def post(self):
     """Create a new patient record"""
     try:
@@ -190,6 +193,7 @@ class PatientDetail(Resource):
   @patients_ns.doc('get_patient')
   @patients_ns.marshal_with(patient_model)
   @login_required
+  @log_function('patients')
   def get(self, patient_id):
     """Get specific patient by ID"""
     patient = Patient.query.filter_by(
@@ -206,6 +210,7 @@ class PatientDetail(Resource):
   @patients_ns.expect(patient_create_model)
   @patients_ns.marshal_with(patient_model)
   @login_required
+  @log_function('patients')
   def put(self, patient_id):
     """Update specific patient"""
     try:
@@ -242,6 +247,7 @@ class PatientDetail(Resource):
 
   @patients_ns.doc('delete_patient')
   @login_required
+  @log_function('patients')
   def delete(self, patient_id):
     """Delete specific patient"""
     try:
@@ -270,6 +276,7 @@ class PatientBulk(Resource):
 
   @patients_ns.doc('bulk_create_patients')
   @login_required
+  @log_function('patients')
   def post(self):
     """Bulk create patients from uploaded data"""
     try:
@@ -339,6 +346,7 @@ class PatientExport(Resource):
   @patients_ns.param('format', 'Export format (csv, excel)', default='csv')
   @patients_ns.param('include_fields', 'Comma-separated list of fields to include')
   @login_required
+  @log_function('patients')
   def get(self):
     """Export patient data"""
     try:
@@ -365,6 +373,7 @@ class PatientStatistics(Resource):
 
   @patients_ns.doc('patient_statistics')
   @login_required
+  @log_function('patients')
   def get(self):
     """Get statistics about patient cohort"""
     try:

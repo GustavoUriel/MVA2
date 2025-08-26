@@ -44,3 +44,15 @@ except Exception as e:
   import traceback
   traceback.print_exc()
   pass
+
+try:
+  from .logs import logs_ns
+  api.add_namespace(logs_ns, path='/logs')
+except Exception:
+  pass
+
+try:
+  from .admin_logs import admin_ns
+  api.add_namespace(admin_ns, path='/admin')
+except Exception:
+  pass

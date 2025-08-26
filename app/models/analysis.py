@@ -10,6 +10,7 @@ from .. import db
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy import func
 from enum import Enum
+from app.utils.logging_utils import log_function
 
 
 class AnalysisType(Enum):
@@ -114,10 +115,13 @@ class Analysis(db.Model):
 
   def start_execution(self):
     """Mark analysis as running"""
+  # log entry/exit via decorator
+  # (decorator applied below)
     self.status = AnalysisStatus.RUNNING
     self.updated_at = datetime.utcnow()
     db.session.commit()
 
+  @log_function('analysis')
   def complete_execution(self, results=None, visualization_data=None, execution_time=None):
     """Mark analysis as completed with results"""
     self.status = AnalysisStatus.COMPLETED
@@ -132,6 +136,7 @@ class Analysis(db.Model):
 
     db.session.commit()
 
+  @log_function('analysis')
   def fail_execution(self, error_message, warnings=None):
     """Mark analysis as failed with error details"""
     self.status = AnalysisStatus.FAILED
@@ -140,6 +145,7 @@ class Analysis(db.Model):
       self.warnings = warnings
     db.session.commit()
 
+  @log_function('analysis')
   def get_configuration(self):
     """Get analysis configuration with defaults"""
     config = self.configuration or {}
@@ -152,6 +158,7 @@ class Analysis(db.Model):
 
     return config
 
+  @log_function('analysis')
   def _get_default_configuration(self):
     """Get default configuration for analysis type"""
     defaults = {
@@ -184,6 +191,7 @@ class Analysis(db.Model):
 
     return defaults.get(self.analysis_type, {})
 
+  @log_function('analysis')
   def get_patient_data(self):
     """Get patient data for analysis based on selection criteria"""
     from app.models.patient import Patient
@@ -218,6 +226,7 @@ class Analysis(db.Model):
 
     return query.all()
 
+  @log_function('analysis')
   def get_microbiome_data(self):
     """Get microbiome data for analysis"""
     from app.models.taxonomy import BrackenResult
@@ -240,6 +249,7 @@ class Analysis(db.Model):
 
     return query.all()
 
+  @log_function('analysis')
   def generate_report_summary(self):
     """Generate summary for publication-ready report"""
     if not self.results:
@@ -256,6 +266,7 @@ class Analysis(db.Model):
 
     return summary
 
+  @log_function('analysis')
   def _extract_key_results(self):
     """Extract key results based on analysis type"""
     if not self.results:
@@ -284,6 +295,7 @@ class Analysis(db.Model):
 
     return key_results
 
+  @log_function('analysis')
   def to_dict(self, include_results=True):
     """Convert analysis to dictionary for API responses"""
     data = {
@@ -317,6 +329,7 @@ class Analysis(db.Model):
     return data
 
   @staticmethod
+  @log_function('analysis')
   def create_analysis(user_id, name, analysis_type, configuration, **kwargs):
     """Create new analysis"""
     analysis = Analysis(
@@ -333,6 +346,7 @@ class Analysis(db.Model):
     return analysis
 
   @staticmethod
+  @log_function('analysis')
   def get_user_analyses(user_id, analysis_type=None, status=None):
     """Get analyses for a user with optional filtering"""
     query = Analysis.query.filter_by(user_id=user_id)

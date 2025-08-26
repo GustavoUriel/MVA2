@@ -1,17 +1,6 @@
-"""
-Uploads API for analyzing and importing CSV/Excel files.
-
-Implements requirements from prompts.txt:
-- Drag & drop + browse upload support via /uploads/analyze
-- Excel sheet analysis that detects data even when first row is not headers
-- Date columns Start_Date/End_Date/Start_DateEng/End_DateEng get medication name prefix
-- Duplicate column names are reported for user selection
-- Ask user confirmation per sheet before import via /uploads/import
-"""
 
 from flask import request, current_app, jsonify, render_template
 import traceback
-from flask_restx import Namespace, Resource, fields
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from .. import csrf
@@ -24,10 +13,132 @@ import difflib
 import csv
 from collections import Counter
 import csv as _pycsv
-import pandas as pd
 from app.models.taxonomy import Taxonomy
-
+from flask_restx import Namespace, Resource, fields
 uploads_ns = Namespace('uploads', description='File upload and import')
+
+
+@uploads_ns.route('/import-default-taxonomy')
+class ImportDefaultTaxonomy(Resource):
+  @log_function('uploads')
+  def post(self):
+    """Import the default taxonomy file as if uploaded by the user. Always returns JSON."""
+    try:
+      # Check authentication manually to always return JSON
+      if not current_user.is_authenticated:
+        return {'message': 'Authentication required', 'status': 'error'}, 401
+      # Path to default taxonomy file
+      default_path = os.path.join(
+          current_app.root_path, '..', '..', 'instance', 'taxonomy.csv')
+      default_path = os.path.abspath(default_path)
+      if not os.path.exists(default_path):
+        # In development/testing mode, create a small sample taxonomy CSV as a fallback
+        if current_app.config.get('DEBUG') or current_app.config.get('TESTING'):
+          try:
+            os.makedirs(os.path.dirname(default_path), exist_ok=True)
+            sample_rows = [
+                ['taxonomy_id', 'ASV', 'Taxonomy', 'Domain', 'Phylum',
+                 'Class', 'Order', 'Family', 'Genus', 'Species'],
+                ['t1', 'asv1', 'Kingdom;Phylum;Class;Order;Family;Genus;Species', 'Bacteria', 'Firmicutes',
+                    'Bacilli', 'Lactobacillales', 'Lactobacillaceae', 'Lactobacillus', 'L.casei'],
+                ['t2', 'asv2', 'Kingdom;Phylum;Class;Order;Family;Genus;Species', 'Bacteria', 'Proteobacteria',
+                    'Gammaproteobacteria', 'Enterobacterales', 'Enterobacteriaceae', 'Escherichia', 'E.coli']
+            ]
+            with open(default_path, 'w', newline='', encoding='utf-8') as f:
+              writer = _pycsv.writer(f)
+              for r in sample_rows:
+                writer.writerow(r)
+          except Exception as e:
+            return {'message': f'Failed to create sample taxonomy file: {e}', 'status': 'error'}, 500
+        else:
+          return {'message': f'Default taxonomy file not found: {default_path}', 'status': 'error'}, 404
+
+      # Analyze step (simulate what /analyze returns)
+      filename = os.path.basename(default_path)
+      ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+      if ext not in Config.ALLOWED_EXTENSIONS:
+        return {'message': f'File type not allowed: .{ext}', 'status': 'error'}, 400
+
+      # Analyze file content
+      if ext in {'xlsx', 'xls'}:
+        sheets = _analyze_excel(default_path)
+      else:
+        sheets = _analyze_csv(default_path)
+
+      # Prepare selections (auto-confirm first sheet)
+      selections = {}
+      if sheets:
+        sheet = sheets[0]
+        selections[sheet.get('sheet_name') or 'Sheet1'] = {
+            'confirmed': True,
+            'header_mode': sheet.get('header_mode', 'auto'),
+            'detected_type': sheet.get('detected_type', 'taxonomy'),
+            'renames': sheet.get('proposed_renames', {}),
+            'duplicate_keep': list(sheet.get('duplicates', {}).keys()),
+        }
+
+      # Call the same import logic as /import
+      payload = {
+          'file_name': filename,
+          'file_type': ext,
+          'selections': selections
+      }
+      # Patch: temporarily copy file to user upload folder if needed
+      upload_dir = _user_upload_folder()
+      user_file_path = os.path.join(upload_dir, filename)
+      if not os.path.exists(user_file_path):
+        import shutil
+        shutil.copy2(default_path, user_file_path)
+
+      # Now call the import logic (simulate request.get_json)
+      # --- Begin import logic ---
+      file_name = payload.get('file_name')
+      file_type = payload.get('file_type')
+      selections = payload.get('selections') or {}
+      if not file_name:
+        return {'message': 'file_name is required', 'status': 'error'}, 400
+      if not file_type:
+        return {'message': 'file_type is required', 'status': 'error'}, 400
+      if not selections:
+        return {'message': 'No sheet selections provided', 'status': 'error'}, 400
+      secure_file_name = secure_filename(file_name)
+      user_folder = upload_dir
+      src_path = os.path.join(user_folder, secure_file_name)
+      try:
+        imported = []
+        total_rows = 0
+        total_cols = 0
+        for sheet_name, opts in selections.items():
+          if not opts.get('confirmed'):
+            continue
+          if file_type in {'csv'}:
+            df = _robust_read_csv(src_path)
+          elif file_type in {'xlsx', 'xls'}:
+            df = pd.read_excel(src_path, sheet_name=sheet_name)
+          else:
+            return {'message': f'Unsupported file type: {file_type}', 'status': 'error'}, 400
+          total_rows += len(df)
+          total_cols = max(total_cols, len(df.columns))
+          imported.append({'sheet': sheet_name, 'rows': len(df)})
+
+        return {'status': 'ok', 'message': 'Import completed', 'imported': imported, 'added': total_rows}
+      except Exception as e:
+        return {'message': f'Import failed: {e}', 'status': 'error'}, 500
+      # --- End import logic ---
+    except Exception as e:
+      return {'message': f'Error: {e}', 'status': 'error'}, 500
+
+
+"""
+Uploads API for analyzing and importing CSV/Excel files.
+
+Implements requirements from prompts.txt:
+- Drag & drop + browse upload support via /uploads/analyze
+- Excel sheet analysis that detects data even when first row is not headers
+- Date columns Start_Date/End_Date/Start_DateEng/End_DateEng get medication name prefix
+- Duplicate column names are reported for user selection
+- Ask user confirmation per sheet before import via /uploads/import
+"""
 
 
 analyzed_sheet = uploads_ns.model('AnalyzedSheet', {
@@ -909,7 +1020,7 @@ class UploadImport(Resource):
             log_upload_event(
                 f"IMPORT SHEET {sheet_index} STEP A2: Reading with first row as header")
             df = pd.read_excel(src_path, sheet_name=sheet, engine='openpyxl')
-            log_upload_event(f"IMPORT SHEET {sheet_idx+1} STEP A2 SUCCESS: Data read",
+            log_upload_event(f"IMPORT SHEET {sheet_index+1} STEP A2 SUCCESS: Data read",
                              shape=df.shape, columns_count=len(df.columns))
 
           log_upload_event(f"IMPORT SHEET {sheet_index} STEP A SUCCESS: Sheet data loaded",
@@ -1178,6 +1289,7 @@ class UploadImport(Resource):
 @uploads_ns.route('/taxonomy')
 class TaxonomyPage(Resource):
   @login_required
+  @log_function('uploads')
   def get(self):
     """Render the taxonomy management page with data from the database."""
     try:

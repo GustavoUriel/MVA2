@@ -27,7 +27,10 @@ from flask_cors import CORS
 from flask_caching import Cache
 from authlib.integrations.flask_client import OAuth
 from config import Config, DevelopmentConfig, ProductionConfig, TestingConfig
-import redis
+try:
+  import redis  # optional dependency, guard for environments without redis
+except Exception:
+  redis = None
 from flask_moment import Moment
 
 
@@ -145,6 +148,40 @@ def create_app(config_class=None):
       instance_path = os.path.join(flask_app.instance_path, 'users')
       os.makedirs(instance_path, exist_ok=True)
       create_instance_directories.executed = True
+
+  # Request logging: log every request entry
+  from app.utils.logging_utils import user_logger, log_api_request, log_api_response
+
+  @flask_app.before_request
+  def log_request_entry():
+    try:
+      user_email = None
+      if hasattr(current_app, 'login_manager') and hasattr(request, 'remote_addr'):
+        pass
+      # Log minimal request info; user-specific logger will place logs in user folder when available
+      comp = 'api' if request.path.startswith('/api') else 'main'
+      user_logger.get_logger(comp)  # ensure logger created
+      log_api_request(request.method, request.path, comp,
+                      remote_addr=request.remote_addr)
+    except Exception:
+      current_app.logger.exception('Failed to log request entry')
+
+  @flask_app.after_request
+  def log_response(response):
+    try:
+      comp = 'api' if request.path.startswith('/api') else 'main'
+      log_api_response(response.status_code, request.path, comp)
+    except Exception:
+      current_app.logger.exception('Failed to log response')
+    return response
+
+  # Teardown: close user logger handlers to avoid file locks in tests
+  @flask_app.teardown_appcontext
+  def close_log_handlers(exc=None):
+    try:
+      user_logger.close_all_handlers()
+    except Exception:
+      current_app.logger.exception('Failed to close user log handlers')
 
   # CSRF is temporarily disabled - will be re-enabled with proper API route exclusion
 

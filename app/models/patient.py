@@ -10,6 +10,7 @@ from flask import current_app
 from .. import db
 from sqlalchemy.dialects.postgresql import JSON
 import json
+from app.utils.logging_utils import log_function
 
 
 class Patient(db.Model):
@@ -366,6 +367,7 @@ class Patient(db.Model):
     }
 
   @staticmethod
+  @log_function('patients')
   def create_from_dict(user_id, patient_data):
     """Create patient from dictionary data with validation"""
     # Map column names using fuzzy matching if needed
@@ -378,6 +380,7 @@ class Patient(db.Model):
     return patient
 
   @staticmethod
+  @log_function('patients')
   def bulk_create_from_dataframe(user_id, df):
     """Create multiple patients from pandas DataFrame"""
     patients = []

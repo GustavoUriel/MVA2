@@ -3,8 +3,10 @@ Data mapping utilities for MVA2 application
 
 Handles mapping and transformation of imported data to database models.
 """
+from app.utils.logging_utils import log_function
 
 
+@log_function('data')
 def map_patient_columns(patient_data):
   """
   Map patient data columns to database model fields
@@ -19,6 +21,7 @@ def map_patient_columns(patient_data):
   return patient_data
 
 
+@log_function('data')
 def map_taxonomy_columns(taxonomy_data):
   """
   Map taxonomy data columns to database model fields

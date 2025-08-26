@@ -9,8 +9,10 @@ import json
 from io import StringIO, BytesIO
 from datetime import datetime
 from flask import Response
+from app.utils.logging_utils import log_function
 
 
+@log_function('data')
 def export_patients_to_csv(patients, include_fields=None):
   """
   Export patient data to CSV format
@@ -74,6 +76,7 @@ def export_patients_to_csv(patients, include_fields=None):
   )
 
 
+@log_function('data')
 def export_taxonomy_to_csv(taxonomies, include_fields=None):
   """
   Export taxonomy data to CSV format
@@ -132,6 +135,7 @@ def export_taxonomy_to_csv(taxonomies, include_fields=None):
   )
 
 
+@log_function('data')
 def export_analysis_results_to_json(analysis):
   """
   Export analysis results to JSON format
@@ -178,6 +182,7 @@ def export_analysis_results_to_json(analysis):
   )
 
 
+@log_function('data')
 def export_bracken_results_to_csv(bracken_results):
   """
   Export Bracken results to CSV format
@@ -230,6 +235,7 @@ def export_bracken_results_to_csv(bracken_results):
   )
 
 
+@log_function('data')
 def create_publication_report(analysis):
   """
   Create a publication-ready report for an analysis

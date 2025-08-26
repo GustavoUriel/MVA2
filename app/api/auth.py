@@ -7,6 +7,7 @@ Handles user authentication, authorization, and session management.
 from flask import request, session, current_app, jsonify, url_for
 from flask_restx import Namespace, Resource, fields
 from flask_login import login_user, logout_user, login_required, current_user
+from app.utils.logging_utils import log_function, log_api_request, log_api_response, user_logger
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import secrets
@@ -47,6 +48,7 @@ class GoogleAuth(Resource):
   @auth_ns.doc('google_auth')
   @auth_ns.expect(google_auth_model)
   @auth_ns.marshal_with(login_response)
+  @log_function('auth')
   def post(self):
     """Authenticate user with Google OAuth"""
     try:
@@ -170,6 +172,7 @@ class Logout(Resource):
 
   @auth_ns.doc('logout')
   @login_required
+  @log_function('auth')
   def post(self):
     """Log out current user"""
     try:
@@ -201,6 +204,7 @@ class AuthStatus(Resource):
 
   @auth_ns.doc('auth_status')
   @auth_ns.marshal_with(user_model)
+  @log_function('auth')
   def get(self):
     """Get current authentication status"""
     if current_user.is_authenticated:
@@ -222,9 +226,47 @@ class Profile(Resource):
   @auth_ns.doc('get_profile')
   @auth_ns.marshal_with(user_model)
   @login_required
+  @log_function('auth')
   def get(self):
     """Get current user profile"""
     return current_user.to_dict()
+
+
+@auth_ns.route('/dev/login-as')
+class DevLogin(Resource):
+  """Development-only helper to log in as a user by email (enabled in DEBUG or TESTING)."""
+  @log_function('auth')
+  def post(self):
+    """Dev-only login for tests (enabled when DEBUG or TESTING)."""
+    try:
+      # Only allow in debug or testing modes
+      from flask import current_app
+      if not (current_app.config.get('DEBUG') or current_app.config.get('TESTING')):
+        return {'success': False, 'message': 'Dev login disabled'}, 403
+
+      data = request.get_json() or {}
+      email = data.get('email')
+      if not email:
+        return {'success': False, 'message': 'email required'}, 400
+
+      user = User.query.filter_by(email=email).first()
+      if not user:
+        # Create a simple local user for tests
+        user = User(email=email, username=email.split('@')[0])
+        user.set_password('dev-password')
+        db.session.add(user)
+        db.session.commit()
+
+      login_user(user, remember=True)
+      session['user_id'] = user.id
+      session['csrf_token'] = secrets.token_hex(16)
+
+      return {'success': True, 'message': 'Logged in', 'user': user.to_dict()}
+
+    except Exception as e:
+      import traceback
+      traceback.print_exc()
+      return {'success': False, 'message': str(e)}, 500
 
   @auth_ns.doc('update_profile')
   @auth_ns.expect(auth_ns.model('ProfileUpdate', {
@@ -233,6 +275,7 @@ class Profile(Resource):
   }))
   @auth_ns.marshal_with(user_model)
   @login_required
+  @log_function('auth')
   def put(self):
     """Update current user profile"""
     try:
@@ -261,6 +304,7 @@ class SessionInfo(Resource):
 
   @auth_ns.doc('session_info')
   @login_required
+  @log_function('auth')
   def get(self):
     """Get current session information"""
     return {
