@@ -90,8 +90,8 @@ class ImportDefaultTaxonomy(Resource):
         import shutil
         shutil.copy2(default_path, user_file_path)
 
-      # Now call the import logic (simulate request.get_json)
-      # --- Begin import logic ---
+      # Now perform the actual import into the DB using the same logic
+      # as the /uploads/import endpoint (but simplified for default file).
       file_name = payload.get('file_name')
       file_type = payload.get('file_type')
       selections = payload.get('selections') or {}
@@ -101,30 +101,68 @@ class ImportDefaultTaxonomy(Resource):
         return {'message': 'file_type is required', 'status': 'error'}, 400
       if not selections:
         return {'message': 'No sheet selections provided', 'status': 'error'}, 400
+
       secure_file_name = secure_filename(file_name)
       user_folder = upload_dir
       src_path = os.path.join(user_folder, secure_file_name)
+
       try:
         imported = []
         total_rows = 0
         total_cols = 0
+        records_added = 0
+
+        # For each confirmed selection, read the data and if it looks like taxonomy data,
+        # clear existing taxonomies and import using the model helper.
         for sheet_name, opts in selections.items():
           if not opts.get('confirmed'):
             continue
+
           if file_type in {'csv'}:
             df = _robust_read_csv(src_path)
           elif file_type in {'xlsx', 'xls'}:
             df = pd.read_excel(src_path, sheet_name=sheet_name)
           else:
             return {'message': f'Unsupported file type: {file_type}', 'status': 'error'}, 400
+
           total_rows += len(df)
           total_cols = max(total_cols, len(df.columns))
-          imported.append({'sheet': sheet_name, 'rows': len(df)})
 
-        return {'status': 'ok', 'message': 'Import completed', 'imported': imported, 'added': total_rows}
+          # Normalize column names similar to /uploads/import
+          try:
+            df.columns = [str(c).lower() for c in df.columns]
+          except Exception:
+            pass
+
+          # If this looks like taxonomy data, import to DB
+          try:
+            from .. import db
+
+            cols = {c.lower() for c in df.columns}
+            if taxonomy_table_identificatos.intersection(cols):
+              # Clear existing taxonomy for user
+              Taxonomy.query.filter_by(user_id=current_user.id).delete()
+              db.session.commit()
+
+              # Use bulk helper to create taxonomy rows; it will log failures
+              created = Taxonomy.bulk_create_from_dataframe(current_user.id, df)
+              added = len(created)
+              records_added += added
+              db.session.commit()
+
+              imported.append({'sheet': sheet_name, 'rows': added, 'cols': int(
+                  df.shape[1]), 'imported_to_db': True})
+            else:
+              imported.append({'sheet': sheet_name, 'rows': int(
+                  df.shape[0]), 'cols': int(df.shape[1])})
+          except Exception as e:
+            # Log and continue with other sheets/selections
+            imported.append({'sheet': sheet_name, 'rows': 0,
+                            'cols': int(df.shape[1]), 'error': str(e)})
+
+        return {'status': 'ok', 'message': 'Import completed', 'imported': imported, 'added': records_added}
       except Exception as e:
         return {'message': f'Import failed: {e}', 'status': 'error'}, 500
-      # --- End import logic ---
     except Exception as e:
       return {'message': f'Error: {e}', 'status': 'error'}, 500
 
