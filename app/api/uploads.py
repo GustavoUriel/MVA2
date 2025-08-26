@@ -9,7 +9,7 @@ Implements requirements from prompts.txt:
 - Ask user confirmation per sheet before import via /uploads/import
 """
 
-from flask import request, current_app, jsonify
+from flask import request, current_app, jsonify, render_template
 import traceback
 from flask_restx import Namespace, Resource, fields
 from flask_login import login_required, current_user
@@ -25,6 +25,7 @@ import csv
 from collections import Counter
 import csv as _pycsv
 import pandas as pd
+from app.models.taxonomy import Taxonomy
 
 uploads_ns = Namespace('uploads', description='File upload and import')
 
@@ -908,7 +909,7 @@ class UploadImport(Resource):
             log_upload_event(
                 f"IMPORT SHEET {sheet_index} STEP A2: Reading with first row as header")
             df = pd.read_excel(src_path, sheet_name=sheet, engine='openpyxl')
-            log_upload_event(f"IMPORT SHEET {sheet_index} STEP A2 SUCCESS: Data read",
+            log_upload_event(f"IMPORT SHEET {sheet_idx+1} STEP A2 SUCCESS: Data read",
                              shape=df.shape, columns_count=len(df.columns))
 
           log_upload_event(f"IMPORT SHEET {sheet_index} STEP A SUCCESS: Sheet data loaded",
@@ -1174,250 +1175,18 @@ class UploadImport(Resource):
     return {'message': 'Import completed', 'imported': imported}
 
 
-@uploads_ns.route('/import-taxonomy')
-class ImportTaxonomy(Resource):
+@uploads_ns.route('/taxonomy')
+class TaxonomyPage(Resource):
   @login_required
-  def post(self):
-    """Direct import: accept uploaded CSV/Excel file and replace current user's taxonomy table."""
+  def get(self):
+    """Render the taxonomy management page with data from the database."""
     try:
-      file = request.files.get('file')
-      if not file:
-        return jsonify({'status': 'error', 'message': 'No file provided'}), 400
-
-      df = _read_into_dataframe(file)
-
-      user_id = getattr(current_user, 'id', None)
-      if user_id is None:
-        return jsonify({'status': 'error', 'message': 'Unauthenticated user'}), 401
-
-      added = import_taxonomy_dataframe(df, user_id)
-      return jsonify({'status': 'ok', 'added': added})
+      user_id = current_user.id
+      current_app.logger.info(f"Fetching taxonomy data for user_id={user_id}")
+      taxonomies = Taxonomy.query.filter_by(user_id=user_id).all()
+      current_app.logger.info(
+          f"Fetched {len(taxonomies)} taxonomy records for user_id={user_id}")
+      return render_template('taxonomy.html', taxonomies=taxonomies)
     except Exception as e:
-      traceback.print_exc()
-      current_app.logger.error(f"Import taxonomy failed: {e}")
-      return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-def _detect_csv_delimiter_from_bytes(sample: bytes) -> str:
-  """Detect the most likely CSV delimiter (comma, semicolon, or tab) from a byte sample."""
-  try:
-    text = sample.decode('utf-8', errors='replace')
-  except Exception:
-    try:
-      text = sample.decode(errors='ignore')
-    except Exception:
-      return ','
-
-  counts = {',': text.count(','), ';': text.count(';'), '\t': text.count('\t')}
-  # If all counts are zero, default to comma
-  try:
-    return max(counts, key=counts.get) if counts else ','
-  except Exception:
-    return ','
-
-
-def _read_into_dataframe(file_storage) -> 'pd.DataFrame':
-  """Read uploaded FileStorage into a pandas DataFrame with delimiter detection and lowercase columns.
-  Supports CSV and Excel files. Applies fuzzy header normalization when available.
-  """
-  from werkzeug.utils import secure_filename
-  import io
-
-  filename = getattr(file_storage, 'filename', '')
-  filename = secure_filename(str(filename)) if filename else ''
-
-  # Read Excel files
-  if filename.lower().endswith(('.xls', '.xlsx')):
-    try:
-      file_storage.stream.seek(0)
-      df = pd.read_excel(file_storage, dtype=str)
-      return df
-    except Exception:
-      # try reading from bytes
-      try:
-        file_storage.stream.seek(0)
-        data = file_storage.read()
-        df = pd.read_excel(io.BytesIO(data), dtype=str)
-        file_storage.stream.seek(0)
-        return df
-      except Exception:
-        file_storage.stream.seek(0)
-        return pd.DataFrame()
-
-  # CSV path: sample and detect delimiter
-  try:
-    file_storage.stream.seek(0)
-  except Exception:
-    pass
-
-  try:
-    sample = file_storage.stream.read(8192)
-  except Exception:
-    try:
-      # fallback: read small chunk from .read()
-      sample = file_storage.read(8192)
-    except Exception:
-      sample = b''
-  try:
-    # reset pointer
-    file_storage.stream.seek(0)
-  except Exception:
-    pass
-
-  delim = _detect_csv_delimiter_from_bytes(sample)
-
-  # Try pandas with detected delimiter
-  try:
-    df = pd.read_csv(file_storage, sep=delim, engine='python',
-                     dtype=str, on_bad_lines='skip')
-    # normalize headers to lowercase
-    df.columns = [str(c).strip().lower() for c in df.columns]
-  except Exception:
-    # try default pandas reader
-    try:
-      file_storage.stream.seek(0)
-      df = pd.read_csv(file_storage, dtype=str, on_bad_lines='skip')
-      df.columns = [str(c).strip().lower() for c in df.columns]
-    except Exception:
-      # last resort: read text and split lines, using the detected delimiter
-      try:
-        file_storage.stream.seek(0)
-      except Exception:
-        pass
-      try:
-        text = file_storage.read().decode('utf-8', errors='replace')
-      except Exception:
-        try:
-          text = sample.decode('utf-8', errors='replace')
-        except Exception:
-          text = ''
-      lines = [l for l in text.splitlines() if l.strip()]
-      if not lines:
-        return pd.DataFrame()
-      rows = [r.split(delim) for r in lines]
-      try:
-        df = pd.DataFrame(rows[1:], columns=rows[0])
-        df.columns = [str(c).strip().lower() for c in df.columns]
-      except Exception:
-        return pd.DataFrame()
-
-  # try fuzzy normalization if available
-  try:
-    from app.utils.data_mapping import normalize_taxonomy_df
-    try:
-      df = normalize_taxonomy_df(df)
-    except Exception:
-      # if normalization fails, keep lowercase columns
-      pass
-  except Exception:
-    pass
-
-  return df
-
-
-def import_taxonomy_dataframe(df, user_id: int) -> int:
-  """Clear Taxonomy rows for user_id and insert rows from df. Returns number added."""
-  from app import db
-  from app.models.taxonomy import Taxonomy
-
-  try:
-    import pandas as _pd
-  except Exception:
-    _pd = None
-
-  if df is None or getattr(df, 'shape', (0, 0))[0] == 0:
-    return 0
-
-  # ensure lowercase columns
-  try:
-    df = df.copy()
-    df.columns = [str(c).strip().lower() for c in df.columns]
-  except Exception:
-    pass
-
-  # delete existing taxonomy rows for this user (attempt efficient delete)
-  added = 0
-  try:
-    Taxonomy.query.filter_by(user_id=user_id).delete()
-    db.session.commit()
-  except Exception:
-    db.session.rollback()
-    try:
-      existing = Taxonomy.query.filter_by(user_id=user_id).all()
-      for e in existing:
-        db.session.delete(e)
-      db.session.commit()
-    except Exception:
-      db.session.rollback()
-      # continue and attempt inserts anyway
-
-  # get model columns set
-  try:
-    model_cols = {c.name for c in Taxonomy.__table__.columns}
-  except Exception:
-    model_cols = set()
-
-  # import each row
-  for _, raw_row in df.iterrows():
-    # build a plain dict for the row
-    try:
-      row = {k: (v if not (_pd is not None and _pd.isna(v)) else None)
-             for k, v in raw_row.to_dict().items()}
-    except Exception:
-      # fallback per-column extraction
-      row = {}
-      for c in getattr(df, 'columns', []):
-        try:
-          v = raw_row[c]
-          row[c] = None if (_pd is not None and _pd.isna(v)) else v
-        except Exception:
-          row[c] = None
-
-    # fuzzy map keys if helper exists
-    try:
-      from app.utils.data_mapping import map_taxonomy_columns
-      mapped = map_taxonomy_columns(row)
-    except Exception:
-      mapped = {k: v for k, v in row.items()}
-
-    # try to create via model helper if present, else set attributes manually
-    try:
-      create_fn = getattr(Taxonomy, 'create_from_dict', None)
-      if callable(create_fn):
-        try:
-          # try both common signatures
-          create_fn(mapped)
-        except TypeError:
-          create_fn(user_id, mapped)
-        added += 1
-        continue
-    except Exception:
-      db.session.rollback()
-      # fall through to manual creation
-
-    try:
-      t = Taxonomy()
-      for key, val in mapped.items():
-        if key in model_cols:
-          try:
-            setattr(t, key, val)
-          except Exception:
-            pass
-      # ensure user_id present
-      try:
-        setattr(t, 'user_id', user_id)
-      except Exception:
-        pass
-      db.session.add(t)
-      added += 1
-    except Exception:
-      db.session.rollback()
-      continue
-
-  try:
-    db.session.commit()
-  except Exception:
-    db.session.rollback()
-    return 0
-
-  return added
+      current_app.logger.error(f"Failed to load taxonomy data: {e}")
+      return render_template('taxonomy.html', taxonomies=[])

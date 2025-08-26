@@ -1,88 +1,242 @@
 {% extends "base.html" %}
 
-{% block title %}Taxonomy - MVA2{% endblock %}
+{% block title %}Taxonomy{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="row">
-        <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1 class="h3 mb-0">Taxonomy Data</h1>
-                <div>
-                    <input id="taxonomy-file-input" type="file" accept=".csv,.xls,.xlsx" style="display:none" />
-                    <button id="import-taxonomy-btn" class="btn btn-primary">
-                        <i class="bi bi-upload me-2"></i>Import Taxonomy
-                    </button>
-                </div>
+        <div class="col-md-12">
+            <h2><i class="fas fa-sitemap"></i> Taxonomy Management</h2>
+            
+            <div class="mb-3">
+                <button type="button" class="btn btn-primary" onclick="importTaxonomy()">
+                    <i class="fas fa-upload"></i> Import Taxonomy
+                </button>
+                <input type="file" id="taxonomyFileInput" accept=".csv,.xlsx,.xls" style="display: none;">
             </div>
-            <script>
-            (function(){
-                const btn = document.getElementById('import-taxonomy-btn');
-                const input = document.getElementById('taxonomy-file-input');
 
-                btn.addEventListener('click', ()=> input.click());
-
-                input.addEventListener('change', async (ev)=>{
-                    const file = ev.target.files[0];
-                    if(!file) return;
-
-                    const form = new FormData();
-                    form.append('file', file);
-
-                    // Directly post to import-taxonomy endpoint to write to DB (API is mounted at /api/v1)
-                    const res = await fetch('/api/v1/uploads/import-taxonomy', {method: 'POST', body: form});
-                    if(!res.ok){
-                        const txt = await res.text();
-                        alert('Direct import failed: '+txt);
-                        return;
-                    }
-                    const data = await res.json();
-                    alert('Import completed: added=' + (data.added || 0));
-                    window.location.reload();
-                });
-            })();
-            </script>
-
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Microbiome Taxonomy</h5>
-                    <p class="text-muted">
-                        Microbiome taxonomy data management and visualization.
-                        This includes taxonomic classification, abundance data, and phylogenetic analysis.
-                    </p>
-                    
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <h6 class="card-title">Species Level</h6>
-                                    <h3 class="text-primary">0</h3>
-                                    <small class="text-muted">Taxonomic entries</small>
+            <!-- Import Modal -->
+            <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="importModalLabel">
+                                <i class="fas fa-upload"></i> Import Taxonomy Data
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="importStatus">
+                                <div class="mb-3">
+                                    <label for="fileInfo" class="form-label">Selected File:</label>
+                                    <div id="fileInfo" class="text-muted">No file selected</div>
+                                </div>
+                                
+                                <div id="progressContainer" style="display: none;">
+                                    <div class="mb-2">
+                                        <span id="progressText">Preparing import...</span>
+                                    </div>
+                                    <div class="progress mb-3">
+                                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="importResults" style="display: none;">
+                                    <div class="alert" id="resultAlert" role="alert">
+                                        <div id="resultMessage"></div>
+                                        <div id="resultDetails" class="mt-2 small"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <h6 class="card-title">Genus Level</h6>
-                                    <h3 class="text-success">0</h3>
-                                    <small class="text-muted">Taxonomic entries</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <div class="card bg-light">
-                                <div class="card-body text-center">
-                                    <h6 class="card-title">Family Level</h6>
-                                    <h3 class="text-info">0</h3>
-                                    <small class="text-muted">Taxonomic entries</small>
-                                </div>
-                            </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="cancelBtn">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="confirmImport()" id="importBtn" disabled>
+                                <i class="fas fa-check"></i> Import
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="closeAndReload()" id="doneBtn" style="display: none;">
+                                <i class="fas fa-check-circle"></i> Done
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Table with taxonomy data -->
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Taxonomy ID</th>
+                            <th>Full Taxonomy</th>
+                            <th>Class</th>
+                            <th>Order</th>
+                            <th>Family</th>
+                            <th>Genus</th>
+                            <th>Species</th>
+                            <th>Common Name</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for taxonomy in taxonomies %}
+                        <tr>
+                            <td>{{ taxonomy.taxonomy_id }}</td>
+                            <td>{{ taxonomy.full_taxonomy }}</td>
+                            <td>{{ taxonomy.class_name }}</td>
+                            <td>{{ taxonomy.order }}</td>
+                            <td>{{ taxonomy.family }}</td>
+                            <td>{{ taxonomy.genus }}</td>
+                            <td>{{ taxonomy.species }}</td>
+                            <td>{{ taxonomy.common_name }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="editTaxonomy({{ taxonomy.id }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTaxonomy({{ taxonomy.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+    function importTaxonomy() {
+        document.getElementById('taxonomyFileInput').click();
+    }
+    
+    document.getElementById('taxonomyFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Show modal and update file info
+            const modal = new bootstrap.Modal(document.getElementById('importModal'));
+            document.getElementById('fileInfo').textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            document.getElementById('importBtn').disabled = false;
+            document.getElementById('progressContainer').style.display = 'none';
+            document.getElementById('importResults').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+            document.getElementById('importBtn').style.display = 'inline-block';
+            document.getElementById('doneBtn').style.display = 'none';
+            modal.show();
+        }
+    });
+
+    function confirmImport() {
+        const fileInput = document.getElementById('taxonomyFileInput');
+        const file = fileInput.files[0];
+        if (!file) {
+            return;
+        }
+
+        // Show progress
+        document.getElementById('progressContainer').style.display = 'block';
+        document.getElementById('importBtn').disabled = true;
+        document.getElementById('cancelBtn').disabled = true;
+        
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        // Simulate progress stages
+        progressText.textContent = 'Uploading file...';
+        progressBar.style.width = '20%';
+        progressBar.setAttribute('aria-valuenow', '20');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/api/v1/uploads/import-taxonomy', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            progressText.textContent = 'Processing data...';
+            progressBar.style.width = '60%';
+            progressBar.setAttribute('aria-valuenow', '60');
+            return response.json();
+        })
+        .then(data => {
+            progressText.textContent = 'Finalizing import...';
+            progressBar.style.width = '100%';
+            progressBar.setAttribute('aria-valuenow', '100');
+            
+            setTimeout(() => {
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('importResults').style.display = 'block';
+                
+                const resultAlert = document.getElementById('resultAlert');
+                const resultMessage = document.getElementById('resultMessage');
+                const resultDetails = document.getElementById('resultDetails');
+                
+                if (data.status === 'ok') {
+                    resultAlert.className = 'alert alert-success';
+                    resultMessage.innerHTML = '<i class="fas fa-check-circle"></i> Import completed successfully!';
+                    resultDetails.textContent = `Added ${data.added} taxonomy records to the database.`;
+                } else {
+                    resultAlert.className = 'alert alert-danger';
+                    resultMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Import failed';
+                    resultDetails.textContent = data.message || 'Unknown error occurred during import.';
+                }
+                
+                document.getElementById('cancelBtn').style.display = 'none';
+                document.getElementById('importBtn').style.display = 'none';
+                document.getElementById('doneBtn').style.display = 'inline-block';
+            }, 500);
+        })
+        .catch(error => {
+            progressText.textContent = 'Import failed';
+            progressBar.style.width = '100%';
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-danger');
+            
+            setTimeout(() => {
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('importResults').style.display = 'block';
+                
+                const resultAlert = document.getElementById('resultAlert');
+                const resultMessage = document.getElementById('resultMessage');
+                const resultDetails = document.getElementById('resultDetails');
+                
+                resultAlert.className = 'alert alert-danger';
+                resultMessage.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Import failed';
+                resultDetails.textContent = `Error: ${error.message || 'Network error or server unavailable.'}`;
+                
+                document.getElementById('cancelBtn').style.display = 'none';
+                document.getElementById('importBtn').style.display = 'none';
+                document.getElementById('doneBtn').style.display = 'inline-block';
+            }, 500);
+        });
+    }
+
+    function closeAndReload() {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('importModal'));
+        modal.hide();
+        // Reset file input
+        document.getElementById('taxonomyFileInput').value = '';
+        // Reload page to show updated taxonomy data
+        setTimeout(() => {
+            window.location.reload();
+        }, 300);
+    }
+
+    function editTaxonomy(id) {
+        // TODO: Implement edit functionality
+        alert('Edit functionality not yet implemented');
+    }
+
+    function deleteTaxonomy(id) {
+        if (confirm('Are you sure you want to delete this taxonomy record?')) {
+            // TODO: Implement delete functionality
+            alert('Delete functionality not yet implemented');
+        }
+    }
+</script>
 {% endblock %}
