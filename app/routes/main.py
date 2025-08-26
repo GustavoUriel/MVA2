@@ -4,6 +4,7 @@ Main web routes for MVA2 application
 Handles the main web interface routes for the application.
 """
 
+from ..models.taxonomy import Taxonomy
 import traceback
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, make_response
 from flask_login import login_required, current_user
@@ -91,8 +92,8 @@ def patients():
 def taxonomy():
   """Taxonomy data page"""
   try:
-    # TODO: Implement taxonomy listing logic
-    return render_template('taxonomy.html')
+    taxonomies = Taxonomy.query.filter_by(user_id=current_user.id).all()
+    return render_template('taxonomy.html', taxonomies=taxonomies)
   except Exception as e:
     traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Taxonomy page error: {e}")
@@ -120,7 +121,8 @@ def analysis():
 def data_upload():
   """Data upload page"""
   try:
-    user_logger.log_user_event('Data upload page accessed', user=current_user.email, ip=request.remote_addr)
+    user_logger.log_user_event(
+        'Data upload page accessed', user=current_user.email, ip=request.remote_addr)
     return render_template('data_upload.html')
   except Exception as e:
     user_logger.log_error('user_events', e, 'Data upload page access')
