@@ -20,6 +20,9 @@ from typing import Dict, Any, List
 from config import BRACKEN_TIME_POINTS, Config, patients_table_columns_name, patients_table_identificatos, taxonomy_table_columns_name, taxonomy_table_identificatos
 from ..utils.logging_utils import log_function, log_upload_event, log_data_transform, user_logger
 import difflib
+import csv
+from collections import Counter
+import csv as _pycsv
 
 
 uploads_ns = Namespace('uploads', description='File upload and import')
@@ -106,6 +109,155 @@ def _user_upload_folder() -> str:
     raise
 
   return base
+
+
+def _detect_csv_delimiter(file_path: str) -> str | None:
+  """Attempt to detect the delimiter of a CSV file by sampling lines.
+  Returns one of ',', ';', '\t' or None if detection failed.
+  """
+  try:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+      sample = ''.join([next(f) for _ in range(10)])
+  except StopIteration:
+    # File has fewer than 10 lines; read entire content
+    try:
+      with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        sample = f.read()
+    except Exception:
+      return None
+  except Exception:
+    return None
+
+  # Count frequencies of candidate delimiters on the first few lines
+  lines = sample.splitlines()
+  if not lines:
+    return None
+
+  delim_counts = {',': 0, ';': 0, '\t': 0}
+  for ln in lines[:10]:
+    delim_counts[','] += ln.count(',')
+    delim_counts[';'] += ln.count(';')
+    delim_counts['\t'] += ln.count('\t')
+
+  # Choose the delimiter with the highest count if it is meaningfully higher
+  most_common, count = max(delim_counts.items(), key=lambda kv: kv[1])
+  # require at least one occurrence and at least 1.5x the next candidate
+  others = [v for k, v in delim_counts.items() if k != most_common]
+  if count == 0:
+    return None
+  if count >= max(1, int(max(others) * 1.5)):
+    return most_common
+  return None
+
+
+def _robust_read_csv(file_path: str, sep: str | None = None) -> pd.DataFrame:
+  """Attempt multiple pandas.read_csv strategies to handle inconsistent quoting.
+
+  Tries common quotechar/engine combinations and returns the first DataFrame
+  whose column count matches the header column count (best-effort). Falls back
+  to a default read if none match.
+  """
+  # determine expected column count from the header line
+  try:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+      header_line = f.readline().strip()
+  except Exception:
+    header_line = ''
+
+  expected_cols = header_line.count(sep or ',') + 1 if header_line else None
+
+  candidates = []
+  # prefer C engine with standard quoting
+  candidates.append({'sep': sep or ',', 'engine': 'c',
+                    'quoting': _pycsv.QUOTE_MINIMAL, 'quotechar': '"'})
+  # try single-quote quoting
+  candidates.append({'sep': sep or ',', 'engine': 'c',
+                    'quoting': _pycsv.QUOTE_MINIMAL, 'quotechar': "'"})
+  # python engine with single-quote
+  candidates.append({'sep': sep or ',', 'engine': 'python',
+                    'quotechar': "'", 'quoting': _pycsv.QUOTE_MINIMAL})
+  # python engine no quoting (best-effort)
+  candidates.append({'sep': sep or ',', 'engine': 'python',
+                    'quoting': _pycsv.QUOTE_NONE})
+
+  for opts in candidates:
+    try:
+      df = pd.read_csv(file_path, **opts)
+      if expected_cols is None or df.shape[1] == expected_cols:
+        return df
+    except Exception:
+      continue
+
+  # Fallback: try a simple read with default pandas heuristics
+  try:
+    return pd.read_csv(file_path, sep=sep or ',', engine='python', encoding='utf-8', on_bad_lines='skip')
+  except Exception:
+    # Last resort: let pandas try with defaults
+    return pd.read_csv(file_path)
+
+
+def _split_commas_not_in_single_quotes(line: str) -> list:
+  """Split a CSV line on commas that are not inside single quotes.
+
+  This is a best-effort parser for messy CSVs that use single quotes as
+  quote characters but sometimes have unmatched quotes. It toggles state on
+  single quotes and splits on commas outside quotes.
+  """
+  parts = []
+  cur = []
+  in_sq = False
+  i = 0
+  while i < len(line):
+    ch = line[i]
+    if ch == "'":
+      in_sq = not in_sq
+      # include the quote for later cleaning
+      cur.append(ch)
+    elif ch == ',' and not in_sq:
+      parts.append(''.join(cur).strip())
+      cur = []
+    else:
+      cur.append(ch)
+    i += 1
+  parts.append(''.join(cur).strip())
+  # clean surrounding single quotes from each part
+  cleaned = []
+  for p in parts:
+    p = p.strip()
+    if len(p) >= 2 and p[0] == "'" and p[-1] == "'":
+      p = p[1:-1].strip()
+    cleaned.append(p if p != '' else None)
+  return cleaned
+
+
+def _read_csv_with_fallback_to_line_split(file_path: str, sep: str | None = None) -> pd.DataFrame:
+  """Read CSV file, falling back to manual line splitting when pandas fails.
+
+  Returns a DataFrame with header parsed from the first line.
+  """
+  try:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+      lines = [ln.rstrip('\n') for ln in f]
+  except Exception:
+    return pd.read_csv(file_path)
+
+  if not lines:
+    return pd.DataFrame()
+
+  header = _split_commas_not_in_single_quotes(lines[0])
+  rows = []
+  for ln in lines[1:]:
+    if not ln.strip():
+      continue
+    parts = _split_commas_not_in_single_quotes(ln)
+    # pad or truncate to header length
+    if len(parts) < len(header):
+      parts += [None] * (len(header) - len(parts))
+    elif len(parts) > len(header):
+      parts = parts[:len(header)]
+    rows.append({h: parts[idx] for idx, h in enumerate(header)})
+
+  return pd.DataFrame(rows, columns=header)
 
 
 def _has_meaningful_data(df: pd.DataFrame) -> bool:
@@ -341,10 +493,23 @@ def _analyze_csv(file_path: str) -> List[Dict[str, Any]]:
   log_upload_event(
       "CSV ANALYSIS START: Initializing CSV file analysis", filepath=file_path)
 
+  # Try to detect delimiter first (comma, semicolon, tab)
+  try:
+    detected_delim = _detect_csv_delimiter(file_path)
+    log_upload_event("CSV ANALYSIS: Detected delimiter",
+                     delimiter=detected_delim)
+  except Exception as e:
+    detected_delim = None
+    log_upload_event("CSV ANALYSIS: Delimiter detection failed, will use pandas default",
+                     error=str(e))
+
   # Step 1: Try reading with first row as header
   log_upload_event("CSV STEP A: Reading CSV with first row as header")
   try:
-    df_first = pd.read_csv(file_path)
+    if detected_delim:
+      df_first = pd.read_csv(file_path, sep=detected_delim, engine='python')
+    else:
+      df_first = pd.read_csv(file_path)
     log_upload_event("CSV STEP A SUCCESS: First row header read",
                      shape=df_first.shape, columns_count=len(df_first.columns))
   except Exception as e:
@@ -510,7 +675,8 @@ class UploadAnalyze(Resource):
 
     # Step 2: Process filename and get file size
     log_upload_event("STEP 3: Processing filename and reading file size")
-    filename = secure_filename(file.filename)
+    raw_filename = file.filename or 'upload'
+    filename = secure_filename(raw_filename)
     log_upload_event("STEP 3a: Filename secured",
                      original=file.filename, secured=filename)
 
@@ -829,11 +995,25 @@ class UploadImport(Resource):
           header_mode = sel.get('header_mode', 'first_row')
           log_upload_event(
               "IMPORT CSV STEP A1: Using header mode", header_mode=header_mode)
+          # Detect delimiter (comma/semicolon/tab) and read accordingly
+          detected_delim = None
+          try:
+            detected_delim = _detect_csv_delimiter(src_path)
+            log_upload_event(
+                "IMPORT CSV: Detected delimiter for import", delimiter=detected_delim)
+          except Exception:
+            detected_delim = None
 
           if header_mode == 'skip_first_row':
             log_upload_event(
                 "IMPORT CSV STEP A2: Reading with skip first row mode")
-            df = pd.read_csv(src_path, header=None)
+            try:
+              if detected_delim:
+                df = _robust_read_csv(src_path, sep=detected_delim)
+              else:
+                df = _robust_read_csv(src_path)
+            except Exception:
+              df = _read_csv_with_fallback_to_line_split(src_path)
             original_shape = df.shape
             log_upload_event(
                 "IMPORT CSV STEP A2a: Raw CSV data read", shape=original_shape)
@@ -850,12 +1030,27 @@ class UploadImport(Resource):
           else:
             log_upload_event(
                 "IMPORT CSV STEP A2: Reading with first row as header")
-            df = pd.read_csv(src_path)
+            try:
+              if detected_delim:
+                df = _robust_read_csv(src_path, sep=detected_delim)
+              else:
+                df = _robust_read_csv(src_path)
+            except Exception:
+              df = _read_csv_with_fallback_to_line_split(src_path)
             log_upload_event("IMPORT CSV STEP A2 SUCCESS: Data read",
                              shape=df.shape, columns_count=len(df.columns))
 
           log_upload_event(
               "IMPORT CSV STEP A SUCCESS: CSV data loaded", final_shape=df.shape)
+
+          # Normalize column names to lowercase
+          try:
+            df.columns = [str(c).lower() for c in df.columns]
+            log_upload_event("IMPORT CSV STEP A1: Normalized columns to lowercase",
+                             columns_preview=list(df.columns)[:10])
+          except Exception as e:
+            log_upload_event("IMPORT CSV STEP A1 FAILED: Could not normalize columns",
+                             error=str(e))
 
           # Apply renames
           log_upload_event("IMPORT CSV STEP B: Applying column renames")
@@ -915,6 +1110,41 @@ class UploadImport(Resource):
                            output_file=out_name, saved_size_bytes=saved_size,
                            rows=int(df.shape[0]), cols=int(df.shape[1]))
 
+          # If this looks like taxonomy data, write to Taxonomy table
+          try:
+            from ..models.taxonomy import Taxonomy
+            from .. import db
+
+            # Heuristic: if any of expected taxonomy identifier columns are present
+            cols = {c.lower() for c in df.columns}
+            if taxonomy_table_identificatos.intersection(cols):
+              log_upload_event("IMPORT CSV STEP E: Detected taxonomy data, importing to DB",
+                               user=current_user.email, rows=int(df.shape[0]))
+
+              # Clear existing taxonomy for user
+              Taxonomy.query.filter_by(user_id=current_user.id).delete()
+              db.session.commit()
+
+              records_added = 0
+              for _, row in df.iterrows():
+                try:
+                  taxonomy_data = {k: v for k,
+                                   v in row.to_dict().items() if pd.notna(v)}
+                  Taxonomy.create_from_dict(current_user.id, taxonomy_data)
+                  records_added += 1
+                except Exception as e:
+                  log_upload_event("IMPORT CSV STEP E WARNING: Failed to create taxonomy",
+                                   error=str(e), row_data=str(row.to_dict())[:200])
+                  continue
+
+              db.session.commit()
+              log_upload_event("IMPORT CSV STEP E SUCCESS: Taxonomy import completed",
+                               added=records_added)
+              imported.append({'sheet': 'CSV', 'rows': records_added, 'cols': int(
+                  df.shape[1]), 'path': out_path, 'imported_to_db': True})
+          except Exception as e:
+            log_upload_event("IMPORT CSV STEP E FAILED: Taxonomy DB import failed",
+                             error=str(e), error_type=type(e).__name__)
           imported.append({
               'sheet': 'CSV',
               'rows': int(df.shape[0]),
@@ -941,3 +1171,81 @@ class UploadImport(Resource):
                      imported_sheets=[item.get('sheet') for item in imported])
 
     return {'message': 'Import completed', 'imported': imported}
+
+
+@uploads_ns.route('/import-taxonomy')
+class UploadImportTaxonomy(Resource):
+  """Direct import of taxonomy file to Taxonomy table (multipart/form-data)
+
+  This endpoint bypasses the analyze/select flow and directly imports a CSV/Excel
+  file into the Taxonomy table for the current user. It detects CSV delimiters
+  (comma/semicolon/tab) and normalizes column names to lowercase before inserting.
+  """
+
+  method_decorators = [login_required, csrf.exempt]  # type: ignore
+
+  @log_function('upload')
+  def post(self):
+    log_upload_event("DIRECT IMPORT STEP 1: import-taxonomy called",
+                     user=current_user.email, ip=request.remote_addr)
+
+    file = request.files.get('file')
+    if not file:
+      return {'message': 'No file provided'}, 400
+
+    raw_filename = file.filename or 'upload'
+    filename = secure_filename(raw_filename)
+    try:
+      upload_dir = _user_upload_folder()
+      dst = os.path.join(upload_dir, filename)
+      file.save(dst)
+    except Exception as e:
+      log_upload_event(
+          'DIRECT IMPORT FAILED: Could not save uploaded file', error=str(e))
+      return {'message': f'Could not save file: {e}'}, 500
+
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    try:
+      if ext in {'xlsx', 'xls'}:
+        df = pd.read_excel(dst, engine='openpyxl')
+      else:
+        delim = _detect_csv_delimiter(dst) or ','
+        try:
+          df = _robust_read_csv(dst, sep=delim)
+        except Exception:
+          df = _read_csv_with_fallback_to_line_split(dst, sep=delim)
+    except Exception as e:
+      log_upload_event(
+          'DIRECT IMPORT FAILED: Could not read file into DataFrame', error=str(e))
+      return {'message': f'Could not parse file: {e}'}, 500
+
+    # Normalize columns
+    try:
+      df.columns = [str(c).lower() for c in df.columns]
+    except Exception:
+      pass
+
+    # Import into DB
+    try:
+      from ..models.taxonomy import Taxonomy
+      from .. import db
+
+      Taxonomy.query.filter_by(user_id=current_user.id).delete()
+      db.session.commit()
+
+      added = 0
+      for _, row in df.iterrows():
+        try:
+          taxonomy_data = {k: v for k, v in row.to_dict().items()
+                           if pd.notna(v)}
+          Taxonomy.create_from_dict(current_user.id, taxonomy_data)
+          added += 1
+        except Exception as e:
+          log_upload_event(
+              'DIRECT IMPORT WARNING: failed to create taxonomy', error=str(e))
+          continue
+
+      return {'message': 'Direct taxonomy import completed', 'added': added}
+    except Exception as e:
+      log_upload_event('DIRECT IMPORT FAILED: DB error', error=str(e))
+      return {'message': f'DB import failed: {e}'}, 500
