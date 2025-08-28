@@ -13,7 +13,7 @@ import difflib
 import csv
 from collections import Counter
 import csv as _pycsv
-from app.models.taxonomy import Taxonomy
+from app.models.taxonomy import Taxonomy, BrackenResult
 from flask_restx import Namespace, Resource, fields
 uploads_ns = Namespace('uploads', description='File upload and import')
 
@@ -632,7 +632,8 @@ def _detect_sheet_type(columns: List[str]) -> str:
 
   # Heuristic for bracken: columns ending with configured suffixes
   suffixes = [cfg['suffix'] for cfg in BRACKEN_TIME_POINTS.values()]
-  if any(any(col.endswith(suf) for suf in suffixes) for col in columns):
+  # Strip whitespace from column names before checking suffixes
+  if any(any(col.strip().endswith(suf) for suf in suffixes) for col in columns):
     return 'bracken'
 
   return 'unknown'
@@ -1229,6 +1230,97 @@ class UploadImport(Resource):
                                added=records_added)
               sheet_import_info.update(
                   {'imported_to_db': True, 'data_type': 'patients', 'db_records': records_added})
+
+            elif data_type == 'bracken':
+              log_upload_event(f"IMPORT SHEET {sheet_index} STEP G: Detected Bracken microbiome data, importing to DB",
+                               user=current_user.email, rows=int(df.shape[0]))
+
+              # Clear existing Bracken results for user (only on first bracken sheet)
+              if sheet_index == 1 or not any(item.get('data_type') == 'bracken' for item in imported):
+                BrackenResult.query.filter_by(user_id=current_user.id).delete()
+                db.session.commit()
+
+              records_added = 0
+              taxonomy_col = df.columns[0]  # First column should be taxonomy_id
+
+              # Process each row (taxonomy)
+              for _, row in df.iterrows():
+                try:
+                  taxonomy_id = row[taxonomy_col]
+                  if pd.isna(taxonomy_id) or str(taxonomy_id).strip() == '':
+                    continue
+
+                  # Extract patient data from columns
+                  for col in df.columns[1:]:  # Skip taxonomy column
+                    col_stripped = col.strip()  # Strip whitespace from column name
+                    if pd.isna(row[col]) or str(row[col]).strip() in ['-', '']:
+                      continue
+
+                    # Parse patient ID and timepoint from column name
+                    patient_id = None
+                    timepoint = None
+
+                    # Check for each timepoint suffix
+                    for tp_key, tp_config in BRACKEN_TIME_POINTS.items():
+                      suffix = tp_config['suffix']
+                      if col_stripped.endswith(suffix):
+                        patient_id = col_stripped[:-len(suffix)]
+                        timepoint = tp_key
+                        break
+
+                    if not patient_id or not timepoint:
+                      continue
+
+                    # Get or create BrackenResult for this patient-taxonomy combination
+                    bracken_result = BrackenResult.query.filter_by(
+                        user_id=current_user.id,
+                        patient_id=patient_id,
+                        taxonomy_id=str(taxonomy_id)
+                    ).first()
+
+                    if not bracken_result:
+                      bracken_result = BrackenResult(
+                          user_id=current_user.id,
+                          patient_id=patient_id,
+                          taxonomy_id=str(taxonomy_id)
+                      )
+                      db.session.add(bracken_result)
+
+                    # Set abundance value for the appropriate timepoint
+                    try:
+                      abundance = float(row[col])
+                      if timepoint == 'pre':
+                        bracken_result.abundance_pre = abundance
+                      elif timepoint == 'during':
+                        bracken_result.abundance_during = abundance
+                      elif timepoint == 'post':
+                        bracken_result.abundance_post = abundance
+
+                      # Calculate deltas when we have multiple timepoints
+                      bracken_result.calculate_deltas()
+
+                    except (ValueError, TypeError):
+                      # Skip non-numeric values
+                      continue
+
+                  # Commit after each taxonomy to avoid memory issues
+                  db.session.commit()
+                  records_added += 1
+
+                  if records_added <= 10:  # Log first 10 for debugging
+                    log_upload_event(f"IMPORT SHEET {sheet_index} STEP G: Processed taxonomy {records_added}",
+                                     taxonomy_id=str(taxonomy_id))
+
+                except Exception as e:
+                  log_upload_event(f"IMPORT SHEET {sheet_index} STEP G WARNING: Failed to process taxonomy",
+                                   error=str(e), taxonomy_id=str(taxonomy_id))
+                  db.session.rollback()
+                  continue
+
+              log_upload_event(f"IMPORT SHEET {sheet_index} STEP G SUCCESS: Bracken import completed",
+                               added=records_added)
+              sheet_import_info.update(
+                  {'imported_to_db': True, 'data_type': 'bracken', 'db_records': records_added})
           except Exception as e:
             log_upload_event(f"IMPORT SHEET {sheet_index} STEP E/F FAILED: Database import failed",
                              error=str(e), error_type=type(e).__name__)
@@ -1423,6 +1515,96 @@ class UploadImport(Resource):
                                added=records_added)
               imported.append({'sheet': 'CSV', 'rows': records_added, 'cols': int(
                   df.shape[1]), 'path': out_path, 'imported_to_db': True, 'data_type': 'patients'})
+
+            elif data_type == 'bracken':
+              log_upload_event("IMPORT CSV STEP G: Detected Bracken microbiome data, importing to DB",
+                               user=current_user.email, rows=int(df.shape[0]))
+
+              # Clear existing Bracken results for user
+              BrackenResult.query.filter_by(user_id=current_user.id).delete()
+              db.session.commit()
+
+              records_added = 0
+              taxonomy_col = df.columns[0]  # First column should be taxonomy_id
+
+              # Process each row (taxonomy)
+              for _, row in df.iterrows():
+                try:
+                  taxonomy_id = row[taxonomy_col]
+                  if pd.isna(taxonomy_id) or str(taxonomy_id).strip() == '':
+                    continue
+
+                  # Extract patient data from columns
+                  for col in df.columns[1:]:  # Skip taxonomy column
+                    col_stripped = col.strip()  # Strip whitespace from column name
+                    if pd.isna(row[col]) or str(row[col]).strip() in ['-', '']:
+                      continue
+
+                    # Parse patient ID and timepoint from column name
+                    patient_id = None
+                    timepoint = None
+
+                    # Check for each timepoint suffix
+                    for tp_key, tp_config in BRACKEN_TIME_POINTS.items():
+                      suffix = tp_config['suffix']
+                      if col_stripped.endswith(suffix):
+                        patient_id = col_stripped[:-len(suffix)]
+                        timepoint = tp_key
+                        break
+
+                    if not patient_id or not timepoint:
+                      continue
+
+                    # Get or create BrackenResult for this patient-taxonomy combination
+                    bracken_result = BrackenResult.query.filter_by(
+                        user_id=current_user.id,
+                        patient_id=patient_id,
+                        taxonomy_id=str(taxonomy_id)
+                    ).first()
+
+                    if not bracken_result:
+                      bracken_result = BrackenResult(
+                          user_id=current_user.id,
+                          patient_id=patient_id,
+                          taxonomy_id=str(taxonomy_id)
+                      )
+                      db.session.add(bracken_result)
+
+                    # Set abundance value for the appropriate timepoint
+                    try:
+                      abundance = float(row[col])
+                      if timepoint == 'pre':
+                        bracken_result.abundance_pre = abundance
+                      elif timepoint == 'during':
+                        bracken_result.abundance_during = abundance
+                      elif timepoint == 'post':
+                        bracken_result.abundance_post = abundance
+
+                      # Calculate deltas when we have multiple timepoints
+                      bracken_result.calculate_deltas()
+
+                    except (ValueError, TypeError):
+                      # Skip non-numeric values
+                      continue
+
+                  # Commit after each taxonomy to avoid memory issues with large datasets
+                  db.session.commit()
+                  records_added += 1
+
+                  if records_added <= 10:  # Log first 10 for debugging
+                    log_upload_event(f"IMPORT CSV STEP G: Processed taxonomy {records_added}",
+                                     taxonomy_id=str(taxonomy_id))
+
+                except Exception as e:
+                  log_upload_event(f"IMPORT CSV STEP G WARNING: Failed to process taxonomy",
+                                   error=str(e), taxonomy_id=str(taxonomy_id))
+                  db.session.rollback()
+                  continue
+
+              log_upload_event("IMPORT CSV STEP G SUCCESS: Bracken import completed",
+                               added=records_added)
+              imported.append({'sheet': 'CSV', 'rows': records_added, 'cols': int(
+                  df.shape[1]), 'path': out_path, 'imported_to_db': True, 'data_type': 'bracken'})
           except Exception as e:
             log_upload_event("IMPORT CSV STEP E/F FAILED: Database import failed",
                              error=str(e), error_type=type(e).__name__)

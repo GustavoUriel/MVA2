@@ -93,11 +93,13 @@ def create_app(config_class=None):
   cache.init_app(flask_app)
   oauth.init_app(flask_app)
 
-  # Configure CORS for API endpoints
+  # Configure CORS for API endpoints. Enable credentials so session cookies are sent with AJAX requests.
+  # Note: using '*' for origins prevents sending credentials, so we explicitly allow any origin but enable credentials
+  # by setting supports_credentials=True. In production, restrict origins to your application's domain.
   CORS(flask_app, resources={
       r"/api/*": {"origins": "*"},
       r"/auth/*": {"origins": "*"}
-  })
+  }, supports_credentials=True)
 
   # Configure login manager
   login_manager.login_view = 'auth.login'  # type: ignore
@@ -221,11 +223,13 @@ def create_app(config_class=None):
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
 
-    # Content Security Policy
+    # Content Security Policy - allow DataTables and jQuery CDNs for scripts and styles
+    # In production, restrict origins to your trusted domains rather than using broad CDN allowances
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+        "script-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://code.jquery.com https://cdn.datatables.net; "
+        "style-src 'self' 'unsafe-inline' https://accounts.google.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://cdn.datatables.net; "
+        "style-src-elem 'self' https://cdn.datatables.net https://fonts.googleapis.com https://cdn.jsdelivr.net; "
         "img-src 'self' data: https:; "
         "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; "
         "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://openidconnect.googleapis.com; "

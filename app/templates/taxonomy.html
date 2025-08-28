@@ -155,29 +155,17 @@
 
             <!-- Table with taxonomy data (API driven) -->
             <div class="table-responsive">
-                <table class="table table-striped table-hover" id="taxonomyTable">
-                    <thead class="table-dark">
-                        <tr>
-                            <th data-col="taxonomy_id" class="sortable">Taxonomy ID <span class="sort-indicator"></span></th>
-                            <th data-col="full_lineage">Full Taxonomy</th>
-                            <th data-col="class" class="sortable">Class <span class="sort-indicator"></span></th>
-                            <th data-col="order" class="sortable">Order <span class="sort-indicator"></span></th>
-                            <th data-col="family" class="sortable">Family <span class="sort-indicator"></span></th>
-                            <th data-col="genus" class="sortable">Genus <span class="sort-indicator"></span></th>
-                            <th data-col="species" class="sortable">Species <span class="sort-indicator"></span></th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="taxonomyBody">
-                        <!-- Filled by JS -->
-                    </tbody>
-                </table>
+                {% from '_components/datatable.html' import datatable %}
+                {{ datatable('taxonomyTable', [
+                    {'data':'taxonomy_id','title':'Taxonomy ID'},
+                    {'data':'full_taxonomy','title':'Full Taxonomy'},
+                    {'data':'class','title':'Class'},
+                    {'data':'order','title':'Order'},
+                    {'data':'family','title':'Family'},
+                    {'data':'genus','title':'Genus'},
+                    {'data':'species','title':'Species'}
+                ], api_endpoint='/api/v1/taxonomy', page_length=25, editable=true) }}
             </div>
-
-            <!-- Pagination controls -->
-            <nav aria-label="taxonomy-pagination">
-                <ul class="pagination" id="taxonomyPagination"></ul>
-            </nav>
         </div>
     </div>
 </div>

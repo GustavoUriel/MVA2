@@ -22,25 +22,15 @@
                     </p>
                     
                     <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Patient ID</th>
-                                    <th>Name</th>
-                                    <th>Age</th>
-                                    <th>Diagnosis</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">
-                                        No patients found. Click "Add Patient" to get started.
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        {% from '_components/datatable.html' import datatable %}
+                        {{ datatable('patientsTable', [
+                            {'data':'patient_id','title':'Patient ID'},
+                            {'data':'first_name','title':'First Name'},
+                            {'data':'last_name','title':'Last Name'},
+                            {'data':'age','title':'Age'},
+                            {'data':'diagnosis','title':'Diagnosis'},
+                            {'data':'status','title':'Status'}
+                        ], api_endpoint='/api/v1/patients', page_length=25, editable=true) }}
                     </div>
                 </div>
             </div>
