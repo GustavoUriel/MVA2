@@ -351,10 +351,11 @@ patients_table_columns_name = [
 patients_table_identificatos = {'age', 'gender', 'race'}
 
 taxonomy_table_columns_name = [
-    'asv', 'taxonomy', 'domain', 'phylum', 'class',
+    'taxonomy_id', 'full_taxonomy', 'domain', 'phylum', 'class',
     'order', 'family', 'genus', 'species'
 ]
-taxonomy_table_identificatos = {'taxonomy', 'domain'}
+
+taxonomy_table_identificatos = {'taxonomy_id', 'domain'}
 
 
 # Advanced Statistical Configuration

@@ -52,6 +52,14 @@ except Exception:
   pass
 
 try:
+  from .taxonomy import taxonomy_ns
+  api.add_namespace(taxonomy_ns, path='/taxonomy')
+except Exception:
+  import traceback
+  traceback.print_exc()
+  pass
+
+try:
   from .admin_logs import admin_ns
   api.add_namespace(admin_ns, path='/admin')
 except Exception:

@@ -54,6 +54,11 @@ def create_app(config_class=None):
 
   flask_app = Flask(__name__)
 
+  # Allow routes to be accessed with or without a trailing slash.
+  # This avoids 308 redirects which can cause fetch() to receive HTML
+  # instead of the expected JSON in some client scenarios.
+  flask_app.url_map.strict_slashes = False
+
   @flask_app.context_processor
   def inject_current_year():
     return {'current_year': datetime.now().year}

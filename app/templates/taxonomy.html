@@ -136,46 +136,48 @@
                 </div>
             </div>
 
-            <!-- Table with taxonomy data -->
+            <!-- Controls: global search and per-column filters -->
+            <div class="mb-3 d-flex gap-2 align-items-center">
+                <input id="globalSearch" class="form-control" placeholder="Search taxonomy..." style="max-width:320px;">
+                <div class="input-group" style="max-width:320px;">
+                    <span class="input-group-text">Taxonomy ID</span>
+                    <input id="filter_taxonomy_id" class="form-control" placeholder="Filter taxonomy_id">
+                </div>
+                <div class="input-group" style="max-width:320px;">
+                    <span class="input-group-text">Class</span>
+                    <input id="filter_class" class="form-control" placeholder="Filter class">
+                </div>
+                <div class="input-group" style="max-width:320px;">
+                    <span class="input-group-text">Genus</span>
+                    <input id="filter_genus" class="form-control" placeholder="Filter genus">
+                </div>
+            </div>
+
+            <!-- Table with taxonomy data (API driven) -->
             <div class="table-responsive">
-                <table class="table table-striped table-hover">
+                <table class="table table-striped table-hover" id="taxonomyTable">
                     <thead class="table-dark">
                         <tr>
-                            <th>Taxonomy ID</th>
-                            <th>Full Taxonomy</th>
-                            <th>Class</th>
-                            <th>Order</th>
-                            <th>Family</th>
-                            <th>Genus</th>
-                            <th>Species</th>
-                            <th>Common Name</th>
+                            <th data-col="taxonomy_id" class="sortable">Taxonomy ID <span class="sort-indicator"></span></th>
+                            <th data-col="full_lineage">Full Taxonomy</th>
+                            <th data-col="class" class="sortable">Class <span class="sort-indicator"></span></th>
+                            <th data-col="order" class="sortable">Order <span class="sort-indicator"></span></th>
+                            <th data-col="family" class="sortable">Family <span class="sort-indicator"></span></th>
+                            <th data-col="genus" class="sortable">Genus <span class="sort-indicator"></span></th>
+                            <th data-col="species" class="sortable">Species <span class="sort-indicator"></span></th>
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for taxonomy in taxonomies %}
-                        <tr>
-                            <td>{{ taxonomy.taxonomy_id }}</td>
-                            <td>{{ taxonomy.full_taxonomy }}</td>
-                            <td>{{ taxonomy.class_name }}</td>
-                            <td>{{ taxonomy.order }}</td>
-                            <td>{{ taxonomy.family }}</td>
-                            <td>{{ taxonomy.genus }}</td>
-                            <td>{{ taxonomy.species }}</td>
-                            <td>{{ taxonomy.common_name }}</td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-primary" onclick="editTaxonomy({{ taxonomy.id }})">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTaxonomy({{ taxonomy.id }})">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="taxonomyBody">
+                        <!-- Filled by JS -->
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination controls -->
+            <nav aria-label="taxonomy-pagination">
+                <ul class="pagination" id="taxonomyPagination"></ul>
+            </nav>
         </div>
     </div>
 </div>
@@ -345,3 +347,151 @@
     }
 </script>
 {% endblock %}
+ 
+<script>
+// Client-side table handling: pagination, search, filters, sorting
+// Initialize client state; if the server provided initial data, use it
+const state = {
+        page: {{ initial_meta.page if initial_meta is defined else 1 }},
+        per_page: {{ initial_meta.per_page if initial_meta is defined else 25 }},
+        search: '',
+        sort_by: 'id',
+        sort_dir: 'asc',
+        filters: {}
+};
+
+// If the server passed initial taxonomy data, render it immediately
+{% if initial_taxonomies is defined %}
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            const initial = {{ initial_taxonomies | tojson | safe }};
+            const meta = {{ initial_meta | tojson | safe }};
+            renderRows(initial);
+            renderPagination(meta.pages || 1, meta.page || 1);
+        } catch (e) {
+            console.error('Failed to render initial taxonomy data', e);
+        }
+    });
+{% endif %}
+
+function buildQuery() {
+    const params = new URLSearchParams();
+    params.set('page', state.page);
+    params.set('per_page', state.per_page);
+    if (state.search) params.set('search', state.search);
+    params.set('sort_by', state.sort_by);
+    params.set('sort_dir', state.sort_dir);
+    for (const [k, v] of Object.entries(state.filters)) {
+        if (v) params.set(`filter_${k}`, v);
+    }
+    return params.toString();
+}
+
+async function fetchTaxonomies() {
+    const q = buildQuery();
+    const res = await fetch(`/api/v1/taxonomy/?${q}`, {credentials: 'same-origin'});
+    if (!res.ok) throw new Error('Failed to fetch taxonomies');
+    return res.json();
+}
+
+function renderRows(items) {
+    const body = document.getElementById('taxonomyBody');
+    body.innerHTML = '';
+    items.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${escapeHtml(t.taxonomy_id || '')}</td>
+            <td>${escapeHtml(t.full_lineage || '')}</td>
+            <td>${escapeHtml(t['class'] || '')}</td>
+            <td>${escapeHtml(t.order || '')}</td>
+            <td>${escapeHtml(t.family || '')}</td>
+            <td>${escapeHtml(t.genus || '')}</td>
+            <td>${escapeHtml(t.species || '')}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="editTaxonomy(${t.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTaxonomy(${t.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+function renderPagination(pages, current) {
+    const ul = document.getElementById('taxonomyPagination');
+    ul.innerHTML = '';
+    for (let p = 1; p <= pages; p++) {
+        const li = document.createElement('li');
+        li.className = 'page-item' + (p === current ? ' active' : '');
+        li.innerHTML = `<a class="page-link" href="#" data-page="${p}">${p}</a>`;
+        ul.appendChild(li);
+    }
+    // attach handlers
+    ul.querySelectorAll('a.page-link').forEach(a => {
+        a.addEventListener('click', (e) => {
+            e.preventDefault();
+            const p = parseInt(e.target.getAttribute('data-page'));
+            state.page = p;
+            load();
+        });
+    });
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(ch){
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
+    });
+}
+
+async function load() {
+    try {
+        const data = await fetchTaxonomies();
+        renderRows(data.taxonomies || []);
+        renderPagination(data.pages || 1, data.page || 1);
+    } catch (e) {
+        console.error('Failed to load taxonomies', e);
+    }
+}
+
+// Wire up search and filter inputs
+document.getElementById('globalSearch').addEventListener('input', (e) => {
+    state.search = e.target.value;
+    state.page = 1;
+    debounceLoad();
+});
+['taxonomy_id','class','genus'].forEach(col => {
+    const el = document.getElementById(`filter_${col}`);
+    if (!el) return;
+    el.addEventListener('input', (e) => {
+        state.filters[col] = e.target.value;
+        state.page = 1;
+        debounceLoad();
+    });
+});
+
+// Sorting handlers on header
+document.querySelectorAll('#taxonomyTable thead th.sortable').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+        const col = th.getAttribute('data-col');
+        if (state.sort_by === col) {
+            state.sort_dir = state.sort_dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            state.sort_by = col;
+            state.sort_dir = 'asc';
+        }
+        state.page = 1;
+        load();
+    });
+});
+
+let debounceHandle = null;
+function debounceLoad() {
+    if (debounceHandle) clearTimeout(debounceHandle);
+    debounceHandle = setTimeout(() => { load(); }, 350);
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    load();
+});
+</script>

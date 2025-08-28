@@ -6,7 +6,6 @@ Handles mapping and transformation of imported data to database models.
 from app.utils.logging_utils import log_function
 
 
-@log_function('data')
 def map_patient_columns(patient_data):
   """
   Map patient data columns to database model fields
@@ -17,8 +16,56 @@ def map_patient_columns(patient_data):
   Returns:
       dict: Mapped data ready for Patient model
   """
-  # Return the data as-is for now, can be enhanced later
-  return patient_data
+  if not patient_data:
+    return {}
+
+  # Clean and normalize the data
+  mapped = {}
+
+  # Helper to clean values
+  def _clean(v):
+    if v is None:
+      return None
+    if isinstance(v, str):
+      v = v.strip()
+      if v == '' or v.lower() in ['na', 'nan', 'null']:
+        return None
+    return v
+
+  # Map the basic fields that exist in the Patient model
+  field_mapping = {
+      'patient_id': 'patient_id',
+      'age': 'age',
+      'gender': 'gender',
+      'race': 'race',
+      'ethnicity': 'ethnicity',
+      'weight_kg': 'weight_kg',
+      'height_m': 'height_m',
+      'bmi': 'bmi',
+      'smoking': 'smoking',
+      'smoking_status': 'smoking_status',
+      'igg': 'igg',
+      'iga': 'iga',
+      'biclonal': 'biclonal',
+      'lightchain': 'lightchain',
+      'igh_rearrangement': 'igh_rearrangement',
+      'hr_mutations': 'hr_mutations',
+      'ultrahr_mutations': 'ultrahr_mutations',
+      'imwg_hr': 'imwg_hr',
+      'functional_hr': 'functional_hr',
+      'iss': 'iss',
+      'riss': 'riss',
+      'beta2microglobulin': 'beta2microglobulin',
+      'creatinine': 'creatinine',
+      'albumin': 'albumin'
+  }
+
+  # Map known fields
+  for csv_key, model_key in field_mapping.items():
+    if csv_key in patient_data:
+      mapped[model_key] = _clean(patient_data[csv_key])
+
+  return mapped
 
 
 @log_function('data')

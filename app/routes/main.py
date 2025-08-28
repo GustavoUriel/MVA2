@@ -100,8 +100,26 @@ def patients():
 def taxonomy():
   """Taxonomy data page"""
   try:
-    taxonomies = Taxonomy.query.filter_by(user_id=current_user.id).all()
-    return render_template('taxonomy.html', taxonomies=taxonomies)
+    # Provide an initial page of taxonomy data so the table isn't empty on first load
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 25, type=int)
+
+    try:
+      pagination = Taxonomy.query.filter_by(user_id=current_user.id).paginate(
+          page=page, per_page=per_page, error_out=False)
+      taxonomies = [t.to_dict() for t in pagination.items]
+      initial_meta = {
+          'total_count': pagination.total,
+          'page': page,
+          'per_page': per_page,
+          'pages': pagination.pages
+      }
+    except Exception:
+      taxonomies = []
+      initial_meta = {'total_count': 0, 'page': 1,
+                      'per_page': per_page, 'pages': 0}
+
+    return render_template('taxonomy.html', initial_taxonomies=taxonomies, initial_meta=initial_meta)
   except Exception as e:
     traceback.print_exc()  # This prints the full traceback
     current_app.logger.error(f"Taxonomy page error: {e}")

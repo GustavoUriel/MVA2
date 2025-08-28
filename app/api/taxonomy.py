@@ -68,19 +68,46 @@ class TaxonomyList(Resource):
     try:
       log_step("Parse request parameters", "START", 'taxonomy')
       page = request.args.get('page', 1, type=int)
-      per_page = min(request.args.get('per_page', 50, type=int), 100)
+      per_page = min(request.args.get('per_page', 50, type=int), 200)
       search = request.args.get('search', '')
       level = request.args.get('level', '')
+      # Sorting and filtering
+      sort_by = request.args.get('sort_by', 'id')
+      sort_dir = request.args.get('sort_dir', 'asc')
+      # Per-column filters: filter_<column>=value
+      filters = {}
+      for col in ['taxonomy_id', 'asv', 'domain', 'phylum', 'class', 'order', 'family', 'genus', 'species']:
+        v = request.args.get(f'filter_{col}')
+        if v:
+          filters[col] = v
+
       log_step("Parse request parameters", "SUCCESS", 'taxonomy',
-               page=page, per_page=per_page, search=search, level=level)
+               page=page, per_page=per_page, search=search, level=level,
+               sort_by=sort_by, sort_dir=sort_dir, filters=list(filters.keys()))
 
       log_step("Build base query", "START", 'taxonomy')
       log_database_operation("SELECT", "taxonomies", 'taxonomy',
                              user_id=current_user.id, operation="filter_by_user")
       query = Taxonomy.query.filter_by(user_id=current_user.id)
-      log_step("Build base query", "SUCCESS", 'taxonomy')
 
-      # Apply search filter
+      # Apply per-column filters
+      col_map = {
+          'taxonomy_id': Taxonomy.taxonomy_id,
+          'asv': Taxonomy.asv,
+          'domain': Taxonomy.domain,
+          'phylum': Taxonomy.phylum,
+          'class': Taxonomy.class_name,
+          'order': Taxonomy.order,
+          'family': Taxonomy.family,
+          'genus': Taxonomy.genus,
+          'species': Taxonomy.species
+      }
+      for col, val in filters.items():
+        if col in col_map:
+          query = query.filter(col_map[col].ilike(f"%{val}%"))
+
+      log_step("Build base query", "SUCCESS", 'taxonomy')
+      # Apply search filter (global across main text columns)
       if search:
         log_step("Apply search filter", "START", 'taxonomy', search_term=search)
         query = query.filter(
@@ -108,6 +135,22 @@ class TaxonomyList(Resource):
           query = query.filter(Taxonomy.family.isnot(None))
         log_step("Apply level filter", "SUCCESS", 'taxonomy')
 
+      # Sorting
+      try:
+        sort_col = col_map.get(sort_by, None)
+        if sort_by == 'id':
+          sort_col = Taxonomy.id
+        if sort_col is None:
+          sort_col = Taxonomy.id
+
+        if sort_dir.lower() == 'desc':
+          query = query.order_by(sort_col.desc())
+        else:
+          query = query.order_by(sort_col.asc())
+      except Exception:
+        # fall back silently
+        query = query.order_by(Taxonomy.id.asc())
+
       # Paginate
       log_step("Execute pagination query", "START", 'taxonomy')
       log_database_operation("SELECT", "taxonomies", 'taxonomy',
@@ -127,7 +170,9 @@ class TaxonomyList(Resource):
           'total_count': pagination.total,
           'page': page,
           'per_page': per_page,
-          'pages': pagination.pages
+          'pages': pagination.pages,
+          'sort_by': sort_by,
+          'sort_dir': sort_dir
       }
 
       log_api_response(200, '/taxonomy', 'taxonomy',

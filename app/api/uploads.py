@@ -1127,12 +1127,113 @@ class UploadImport(Resource):
                            output_file=out_name, saved_size_bytes=saved_size,
                            rows=int(df.shape[0]), cols=int(df.shape[1]))
 
-          imported.append({
-              'sheet': sheet,
-              'rows': int(df.shape[0]),
-              'cols': int(df.shape[1]),
-              'path': out_path
-          })
+          # Detect data type and import to appropriate table
+          try:
+            from ..models.taxonomy import Taxonomy
+            from ..models.patient import Patient
+            from .. import db
+
+            # Determine data type based on column names
+            cols = {c.lower() for c in df.columns}
+            data_type = _detect_data_type(list(df.columns))
+            sheet_import_info = {
+                'sheet': sheet,
+                'rows': int(df.shape[0]),
+                'cols': int(df.shape[1]),
+                'path': out_path
+            }
+
+            if data_type == 'taxonomy' and taxonomy_table_identificatos.intersection(cols):
+              log_upload_event(f"IMPORT SHEET {sheet_index} STEP E: Detected taxonomy data, importing to DB",
+                               user=current_user.email, rows=int(df.shape[0]))
+
+              # Clear existing taxonomy for user (only on first taxonomy sheet)
+              if sheet_index == 1 or not any(item.get('data_type') == 'taxonomy' for item in imported):
+                Taxonomy.query.filter_by(user_id=current_user.id).delete()
+                db.session.commit()
+
+              records_added = 0
+              for _, row in df.iterrows():
+                try:
+                  taxonomy_data = {k: v for k,
+                                   v in row.to_dict().items() if pd.notna(v)}
+                  Taxonomy.create_from_dict(current_user.id, taxonomy_data)
+                  records_added += 1
+                except Exception as e:
+                  log_upload_event(f"IMPORT SHEET {sheet_index} STEP E WARNING: Failed to create taxonomy",
+                                   error=str(e), row_data=str(row.to_dict())[:200])
+                  continue
+
+              db.session.commit()
+              log_upload_event(f"IMPORT SHEET {sheet_index} STEP E SUCCESS: Taxonomy import completed",
+                               added=records_added)
+              sheet_import_info.update(
+                  {'imported_to_db': True, 'data_type': 'taxonomy', 'db_records': records_added})
+
+            elif data_type == 'patients' and patients_table_identificatos.intersection(cols):
+              log_upload_event(f"IMPORT SHEET {sheet_index} STEP F: Detected patient data, importing to DB",
+                               user=current_user.email, rows=int(df.shape[0]))
+
+              # Clear existing patients for user (only on first patient sheet)
+              if sheet_index == 1 or not any(item.get('data_type') == 'patients' for item in imported):
+                Patient.query.filter_by(user_id=current_user.id).delete()
+                db.session.commit()
+
+              records_added = 0
+              for idx, row in df.iterrows():
+                try:
+                  # Convert row to dict and clean the data
+                  row_dict = row.to_dict()
+                  patient_data = {}
+
+                  # Clean the data - handle NaN values properly
+                  for k, v in row_dict.items():
+                    if pd.isna(v) or v == '':
+                      patient_data[k] = None
+                    else:
+                      patient_data[k] = v
+
+                  # Create patient with proper error handling
+                  patient = Patient(user_id=current_user.id)
+
+                  # Set basic fields that are commonly available
+                  if patient_data.get('patient_id'):
+                    patient.patient_id = str(patient_data['patient_id'])
+                  if patient_data.get('age'):
+                    try:
+                      patient.age = float(patient_data['age'])
+                    except (ValueError, TypeError):
+                      pass
+                  if patient_data.get('gender'):
+                    patient.gender = str(patient_data['gender'])
+                  if patient_data.get('race'):
+                    patient.race = str(patient_data['race'])
+                  if patient_data.get('ethnicity'):
+                    patient.ethnicity = str(patient_data['ethnicity'])
+
+                  # Add patient to session and commit immediately
+                  db.session.add(patient)
+                  db.session.commit()
+                  records_added += 1
+
+                  if records_added <= 10:  # Log first 10 for debugging
+                    log_upload_event(f"IMPORT SHEET {sheet_index} STEP F: Created patient {records_added}",
+                                     patient_id=patient.patient_id)
+
+                except Exception as e:
+                  log_upload_event(f"IMPORT SHEET {sheet_index} STEP F WARNING: Failed to create patient {idx + 1}",
+                                   error=str(e), row_data=str(row.to_dict())[:200])
+                  db.session.rollback()
+                  continue
+              log_upload_event(f"IMPORT SHEET {sheet_index} STEP F SUCCESS: Patient import completed",
+                               added=records_added)
+              sheet_import_info.update(
+                  {'imported_to_db': True, 'data_type': 'patients', 'db_records': records_added})
+          except Exception as e:
+            log_upload_event(f"IMPORT SHEET {sheet_index} STEP E/F FAILED: Database import failed",
+                             error=str(e), error_type=type(e).__name__)
+
+          imported.append(sheet_import_info)
 
       else:
         # CSV single-sheet equivalent
@@ -1261,14 +1362,17 @@ class UploadImport(Resource):
                            output_file=out_name, saved_size_bytes=saved_size,
                            rows=int(df.shape[0]), cols=int(df.shape[1]))
 
-          # If this looks like taxonomy data, write to Taxonomy table
+          # Detect data type and import to appropriate table
           try:
             from ..models.taxonomy import Taxonomy
+            from ..models.patient import Patient
             from .. import db
 
-            # Heuristic: if any of expected taxonomy identifier columns are present
+            # Determine data type based on column names
             cols = {c.lower() for c in df.columns}
-            if taxonomy_table_identificatos.intersection(cols):
+            data_type = _detect_data_type(list(df.columns))
+
+            if data_type == 'taxonomy' and taxonomy_table_identificatos.intersection(cols):
               log_upload_event("IMPORT CSV STEP E: Detected taxonomy data, importing to DB",
                                user=current_user.email, rows=int(df.shape[0]))
 
@@ -1292,9 +1396,35 @@ class UploadImport(Resource):
               log_upload_event("IMPORT CSV STEP E SUCCESS: Taxonomy import completed",
                                added=records_added)
               imported.append({'sheet': 'CSV', 'rows': records_added, 'cols': int(
-                  df.shape[1]), 'path': out_path, 'imported_to_db': True})
+                  df.shape[1]), 'path': out_path, 'imported_to_db': True, 'data_type': 'taxonomy'})
+
+            elif data_type == 'patients' and patients_table_identificatos.intersection(cols):
+              log_upload_event("IMPORT CSV STEP F: Detected patient data, importing to DB",
+                               user=current_user.email, rows=int(df.shape[0]))
+
+              # Clear existing patients for user
+              Patient.query.filter_by(user_id=current_user.id).delete()
+              db.session.commit()
+
+              records_added = 0
+              for _, row in df.iterrows():
+                try:
+                  patient_data = {k: v for k,
+                                  v in row.to_dict().items() if pd.notna(v)}
+                  Patient.create_from_dict(current_user.id, patient_data)
+                  records_added += 1
+                except Exception as e:
+                  log_upload_event("IMPORT CSV STEP F WARNING: Failed to create patient",
+                                   error=str(e), row_data=str(row.to_dict())[:200])
+                  continue
+
+              db.session.commit()
+              log_upload_event("IMPORT CSV STEP F SUCCESS: Patient import completed",
+                               added=records_added)
+              imported.append({'sheet': 'CSV', 'rows': records_added, 'cols': int(
+                  df.shape[1]), 'path': out_path, 'imported_to_db': True, 'data_type': 'patients'})
           except Exception as e:
-            log_upload_event("IMPORT CSV STEP E FAILED: Taxonomy DB import failed",
+            log_upload_event("IMPORT CSV STEP E/F FAILED: Database import failed",
                              error=str(e), error_type=type(e).__name__)
           imported.append({
               'sheet': 'CSV',
